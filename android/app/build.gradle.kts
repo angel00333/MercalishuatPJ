@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.mercalishuat"
+    namespace = "com.aqualeaf.mercalishuat"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 

@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../services/session_service.dart';
-
-import 'login_screen.dart';
-import 'home_usuario_screen.dart';
 import 'home_emprendedor_screen.dart';
+import 'home_usuario_screen.dart';
+import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -17,7 +16,6 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-
     verificarSesion();
   }
 
@@ -26,12 +24,11 @@ class _SplashScreenState extends State<SplashScreen> {
       const Duration(seconds: 2),
     );
 
-    final existeSesion =
-        await SessionService.existeSesion();
+    final haySesion = await SessionService.haySesion();
 
     if (!mounted) return;
 
-    if (!existeSesion) {
+    if (!haySesion) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -42,8 +39,7 @@ class _SplashScreenState extends State<SplashScreen> {
       return;
     }
 
-    final rol =
-        await SessionService.obtenerRol();
+    final rol = await SessionService.obtenerRol();
 
     if (!mounted) return;
 
@@ -51,16 +47,14 @@ class _SplashScreenState extends State<SplashScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              const HomeEmprendedorScreen(),
+          builder: (_) => const HomeEmprendedorScreen(),
         ),
       );
     } else {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              const HomeUsuarioScreen(),
+          builder: (_) => const HomeUsuarioScreen(),
         ),
       );
     }
@@ -68,55 +62,26 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        width: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF008F95),
-              Color(0xFF00B8B0),
-            ],
-          ),
-        ),
-        child: const Column(
-          mainAxisAlignment:
-              MainAxisAlignment.center,
+    return const Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               Icons.storefront,
               size: 90,
-              color: Colors.white,
+              color: Color(0xFF00897B),
             ),
-
             SizedBox(height: 20),
-
             Text(
-              'EmprendeSV',
+              'Mercalishuat',
               style: TextStyle(
-                fontSize: 34,
+                fontSize: 30,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
               ),
             ),
-
-            SizedBox(height: 8),
-
-            Text(
-              'Descubre. Emprende. Conecta.',
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 16,
-              ),
-            ),
-
-            SizedBox(height: 40),
-
-            CircularProgressIndicator(
-              color: Colors.white,
-            ),
+            SizedBox(height: 25),
+            CircularProgressIndicator(),
           ],
         ),
       ),
