@@ -1,4 +1,4 @@
-package com.example.mercalishuat
+package com.aqualeaf.mercalishuat
 
 import io.flutter.embedding.android.FlutterActivity
 

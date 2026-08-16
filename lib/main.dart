@@ -1,19 +1,59 @@
 import 'package:flutter/material.dart';
 
+import 'config/app_theme.dart';
 import 'screens/splash_screen.dart';
+import 'services/theme_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  final themeService = ThemeService();
+
+  await themeService.cargarTema();
+
   runApp(
-    const MercalishuatApp(),
+    MercalishuatApp(
+      themeService: themeService,
+    ),
   );
 }
 
-class MercalishuatApp extends StatelessWidget {
+class MercalishuatApp extends StatefulWidget {
+  final ThemeService themeService;
+
   const MercalishuatApp({
     super.key,
+    required this.themeService,
   });
+
+  @override
+  State<MercalishuatApp> createState() =>
+      _MercalishuatAppState();
+}
+
+class _MercalishuatAppState
+    extends State<MercalishuatApp> {
+  @override
+  void initState() {
+    super.initState();
+
+    widget.themeService.addListener(
+      _actualizarTema,
+    );
+  }
+
+  void _actualizarTema() {
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.themeService.removeListener(
+      _actualizarTema,
+    );
+
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,22 +62,16 @@ class MercalishuatApp extends StatelessWidget {
 
       debugShowCheckedModeBanner: false,
 
-      theme: ThemeData(
-        useMaterial3: true,
+      theme: AppTheme.lightTheme,
 
-        colorScheme:
-            ColorScheme.fromSeed(
-          seedColor:
-              const Color(0xFF00897B),
-        ),
+      darkTheme: AppTheme.darkTheme,
 
-        inputDecorationTheme:
-            const InputDecorationTheme(
-          border: OutlineInputBorder(),
-        ),
+      themeMode:
+          widget.themeService.themeMode,
+
+      home: SplashScreen(
+        themeService: widget.themeService,
       ),
-
-      home: const SplashScreen(),
     );
   }
 }

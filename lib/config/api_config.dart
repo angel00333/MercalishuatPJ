@@ -1,13 +1,13 @@
 class ApiConfig {
   static const String baseUrl =
-      'http://localhost:3000/api';
+      'https://mercalishuatbackend-production.up.railway.app';
 
   static const String login =
-      '$baseUrl/auth/login';
+      '$baseUrl/api/auth/login';
 
   static const String register =
-      '$baseUrl/auth/register';
+      '$baseUrl/api/auth/register';
 
   static const String profile =
-      '$baseUrl/auth/profile';
+      '$baseUrl/api/auth/profile';
 }

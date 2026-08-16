@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import '../services/theme_service.dart';
 import 'login_screen.dart';
 
 class SeleccionarRolScreen extends StatefulWidget {
   final String nombre;
   final String correo;
   final String password;
+  final ThemeService themeService;
 
   const SeleccionarRolScreen({
     super.key,
     required this.nombre,
     required this.correo,
     required this.password,
+    required this.themeService,
   });
 
   @override
@@ -20,18 +23,13 @@ class SeleccionarRolScreen extends StatefulWidget {
       _SeleccionarRolScreenState();
 }
 
-class _SeleccionarRolScreenState
-    extends State<SeleccionarRolScreen> {
+class _SeleccionarRolScreenState extends State<SeleccionarRolScreen> {
   String? rolSeleccionado;
-
   bool cargando = false;
 
   Future<void> registrar() async {
     if (rolSeleccionado == null) {
-      mostrarMensaje(
-        'Selecciona un tipo de cuenta',
-      );
-
+      mostrarMensaje('Selecciona un tipo de cuenta');
       return;
     }
 
@@ -55,22 +53,22 @@ class _SeleccionarRolScreenState
     if (resultado['success'] == true) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Cuenta creada correctamente',
-          ),
+          content: Text('Cuenta creada correctamente'),
         ),
       );
 
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
-          builder: (_) => const LoginScreen(),
+          builder: (_) => LoginScreen(
+            themeService: widget.themeService,
+          ),
         ),
         (route) => false,
       );
     } else {
       mostrarMensaje(
-        resultado['message'],
+        resultado['message'] ?? 'No se pudo crear la cuenta',
       );
     }
   }
@@ -89,12 +87,11 @@ class _SeleccionarRolScreenState
     required String valor,
     required IconData icono,
   }) {
-    final seleccionado =
-        rolSeleccionado == valor;
+    final seleccionado = rolSeleccionado == valor;
 
     return Card(
-      elevation: seleccionado ? 5 : 1,
       child: InkWell(
+        borderRadius: BorderRadius.circular(14),
         onTap: () {
           setState(() {
             rolSeleccionado = valor;
@@ -103,51 +100,42 @@ class _SeleccionarRolScreenState
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: seleccionado
-                  ? const Color(0xFF00897B)
+                  ? const Color(0xFFFF7E01)
                   : Colors.transparent,
               width: 2,
             ),
-            borderRadius:
-                BorderRadius.circular(12),
           ),
           child: Row(
             children: [
               Icon(
                 icono,
                 size: 45,
-                color: const Color(0xFF00897B),
+                color: const Color(0xFFFF7E01),
               ),
-
-              const SizedBox(width: 20),
-
+              const SizedBox(width: 18),
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       titulo,
                       style: const TextStyle(
                         fontSize: 18,
-                        fontWeight:
-                            FontWeight.bold,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-
                     const SizedBox(height: 5),
-
-                    Text(
-                      descripcion,
-                    ),
+                    Text(descripcion),
                   ],
                 ),
               ),
-
               Radio<String>(
                 value: valor,
                 groupValue: rolSeleccionado,
+                activeColor: const Color(0xFFFF7E01),
                 onChanged: (value) {
                   setState(() {
                     rolSeleccionado = value;
@@ -165,9 +153,7 @@ class _SeleccionarRolScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Seleccionar rol',
-        ),
+        title: const Text('Seleccionar rol'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
@@ -175,45 +161,44 @@ class _SeleccionarRolScreenState
           children: [
             const Text(
               '¿Cómo utilizarás Mercalishuat?',
+              textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 23,
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 30),
-
             tarjetaRol(
               titulo: 'Usuario',
               descripcion:
-                  'Descubre productos y emprendimientos.',
+                  'Descubre productos, tiendas y emprendimientos.',
               valor: 'usuario',
-              icono: Icons.person,
+              icono: Icons.person_outline,
             ),
-
             const SizedBox(height: 15),
-
             tarjetaRol(
               titulo: 'Emprendedor',
               descripcion:
                   'Crea tu tienda y promociona tus productos.',
               valor: 'emprendedor',
-              icono: Icons.store,
+              icono: Icons.storefront_outlined,
             ),
-
             const Spacer(),
-
             SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                onPressed:
-                    cargando ? null : registrar,
+                onPressed: cargando ? null : registrar,
                 child: cargando
-                    ? const CircularProgressIndicator()
-                    : const Text(
-                        'Crear cuenta',
-                      ),
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Crear cuenta'),
               ),
             ),
           ],
