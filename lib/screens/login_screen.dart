@@ -103,12 +103,13 @@ class _LoginScreenState extends State<LoginScreen> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: Column(
-              children: [
-                const Icon(
-                  Icons.storefront,
-                  size: 90,
-                  color: Color(0xFFFF7E01),
-                ),
+  children: [
+    Image.asset(
+      'assets/logo.png',
+      width: 150,
+      height: 150,
+      fit: BoxFit.contain,
+    ),
                 const SizedBox(height: 16),
                 const Text(
                   'Mercalishuat',

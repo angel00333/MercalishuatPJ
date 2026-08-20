@@ -83,34 +83,34 @@ class _SplashScreenState
   }
 
   @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment:
-              MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.storefront,
-              size: 90,
+Widget build(BuildContext context) {
+  return Scaffold(
+    body: Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Image.asset(
+            'assets/logo.png',
+            width: 150,
+            height: 150,
+            fit: BoxFit.contain,
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Mercalishuat',
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.bold,
               color: Color(0xFFFF7E01),
             ),
-            SizedBox(height: 20),
-            Text(
-              'Mercalishuat',
-              style: TextStyle(
-                fontSize: 30,
-                fontWeight:
-                    FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 25),
-            CircularProgressIndicator(
-              color: Color(0xFFFF7E01),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 25),
+          const CircularProgressIndicator(
+            color: Color(0xFFFF7E01),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 }
