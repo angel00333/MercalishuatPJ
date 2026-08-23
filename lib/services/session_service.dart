@@ -54,4 +54,22 @@ class SessionService {
     await prefs.remove(_correoKey);
     await prefs.remove(_rolKey);
   }
+
+  static Future<void> actualizarDatos({
+  required String nombre,
+  required String correo,
+}) async {
+  final prefs =
+      await SharedPreferences.getInstance();
+
+  await prefs.setString(
+    'nombre',
+    nombre,
+  );
+
+  await prefs.setString(
+    'correo',
+    correo,
+  );
+}
 }

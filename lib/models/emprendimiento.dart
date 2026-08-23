@@ -6,6 +6,7 @@ class Emprendimiento {
   final String? descripcion;
   final String? telefono;
   final String? correoContacto;
+  final String? imagenUrl;
 
   final bool activo;
 
@@ -17,6 +18,7 @@ class Emprendimiento {
     this.usuarioId,
     required this.nombre,
     this.descripcion,
+    this.imagenUrl,
     this.telefono,
     this.correoContacto,
     this.activo = true,
@@ -38,6 +40,9 @@ class Emprendimiento {
 
       descripcion:
           json['descripcion']?.toString(),
+          
+      imagenUrl:
+          json['imagen_url']?.toString(),
 
       telefono:
           json['telefono']?.toString(),

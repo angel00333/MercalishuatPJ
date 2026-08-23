@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
+import '../config/app_theme.dart';
+import '../services/auth_service.dart';
+import '../services/perfil_imagen_service.dart';
 import '../services/session_service.dart';
 import '../services/theme_service.dart';
 import 'login_screen.dart';
@@ -13,71 +17,236 @@ class PerfilScreen extends StatefulWidget {
   });
 
   @override
-  State<PerfilScreen> createState() => _PerfilScreenState();
+  State<PerfilScreen> createState() =>
+      _PerfilScreenState();
 }
 
-class _PerfilScreenState extends State<PerfilScreen> {
-  String nombre = '';
-  String correo = '';
+class _PerfilScreenState
+    extends State<PerfilScreen> {
+  final TextEditingController nombreController =
+      TextEditingController();
+
+  final TextEditingController correoController =
+      TextEditingController();
+
+  final ImagePicker picker = ImagePicker();
+
   String rol = '';
+  String? fotoPerfilUrl;
 
   bool cargando = true;
+  bool guardando = false;
+  bool subiendoFoto = false;
 
   @override
   void initState() {
     super.initState();
-    cargarDatos();
+    cargarPerfil();
   }
 
-  Future<void> cargarDatos() async {
-    final nombreGuardado =
-        await SessionService.obtenerNombre();
+  Future<void> cargarPerfil() async {
+    if (mounted) {
+      setState(() {
+        cargando = true;
+      });
+    }
 
-    final correoGuardado =
-        await SessionService.obtenerCorreo();
-
-    final rolGuardado =
-        await SessionService.obtenerRol();
+    final resultado =
+        await AuthService.obtenerPerfil();
 
     if (!mounted) return;
 
+    if (resultado['success'] == true) {
+      final usuario =
+          resultado['usuario'] as Map<String, dynamic>?;
+
+      if (usuario != null) {
+        nombreController.text =
+            usuario['nombre']?.toString() ?? '';
+
+        correoController.text =
+            usuario['correo']?.toString() ?? '';
+
+        rol =
+            usuario['rol']?.toString() ?? '';
+
+        fotoPerfilUrl =
+            usuario['foto_perfil_url']?.toString();
+      }
+    } else {
+      mostrarMensaje(
+        resultado['message'] ??
+            'No se pudo cargar el perfil',
+      );
+    }
+
     setState(() {
-      nombre = nombreGuardado ?? '';
-      correo = correoGuardado ?? '';
-      rol = rolGuardado ?? '';
       cargando = false;
     });
   }
 
-  Future<void> cerrarSesion() async {
-    final confirmar = await showDialog<bool>(
+  Future<void> guardarPerfil() async {
+    final nombre =
+        nombreController.text.trim();
+
+    final correo =
+        correoController.text.trim();
+
+    if (nombre.isEmpty ||
+        correo.isEmpty) {
+      mostrarMensaje(
+        'Completa nombre y correo',
+      );
+      return;
+    }
+
+    setState(() {
+      guardando = true;
+    });
+
+    final resultado =
+        await AuthService.editarPerfil(
+      nombre: nombre,
+      correo: correo,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      guardando = false;
+    });
+
+    if (resultado['success'] == true) {
+      await SessionService.actualizarDatos(
+        nombre: nombre,
+        correo: correo,
+      );
+
+      mostrarMensaje(
+        resultado['message'] ??
+            'Perfil actualizado correctamente',
+      );
+
+      return;
+    }
+
+    mostrarMensaje(
+      resultado['message'] ??
+          'No se pudo actualizar el perfil',
+    );
+  }
+
+  Future<void> elegirFoto(
+    ImageSource source,
+  ) async {
+    try {
+      final imagen =
+          await picker.pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 1200,
+      );
+
+      if (imagen == null) return;
+
+      setState(() {
+        subiendoFoto = true;
+      });
+
+      final resultado =
+          await PerfilImagenService
+              .subirFotoPerfil(
+        imagen,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        subiendoFoto = false;
+      });
+
+      if (resultado['success'] == true) {
+        final nuevaUrl =
+            resultado['foto_perfil_url']
+                ?.toString();
+
+        if (nuevaUrl != null &&
+            nuevaUrl.isNotEmpty) {
+          setState(() {
+            fotoPerfilUrl = nuevaUrl;
+          });
+        }
+
+        mostrarMensaje(
+          resultado['message'] ??
+              'Foto actualizada correctamente',
+        );
+
+        return;
+      }
+
+      mostrarMensaje(
+        resultado['message'] ??
+            'No se pudo subir la foto',
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        subiendoFoto = false;
+      });
+
+      mostrarMensaje(
+        'No se pudo seleccionar la imagen',
+      );
+    }
+  }
+
+  void mostrarOpcionesFoto() {
+    showModalBottomSheet(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Cerrar sesión'),
-          content: const Text(
-            '¿Deseas cerrar tu sesión de Mercalishuat?',
+      builder: (_) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(
+                  Icons.photo_library_outlined,
+                ),
+                title: const Text(
+                  'Elegir de galería',
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+
+                  elegirFoto(
+                    ImageSource.gallery,
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.camera_alt_outlined,
+                ),
+                title: const Text(
+                  'Tomar foto',
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+
+                  elegirFoto(
+                    ImageSource.camera,
+                  );
+                },
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context, false);
-              },
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context, true);
-              },
-              child: const Text('Cerrar sesión'),
-            ),
-          ],
         );
       },
     );
+  }
 
-    if (confirmar != true) return;
-
+  Future<void> cerrarSesion() async {
     await SessionService.cerrarSesion();
 
     if (!mounted) return;
@@ -86,24 +255,30 @@ class _PerfilScreenState extends State<PerfilScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => LoginScreen(
-          themeService: widget.themeService,
+          themeService:
+              widget.themeService,
         ),
       ),
       (route) => false,
     );
   }
 
-  String obtenerNombreRol() {
-    switch (rol) {
-      case 'emprendedor':
-        return 'Emprendedor';
+  void mostrarMensaje(String mensaje) {
+    if (!mounted) return;
 
-      case 'administrador':
-        return 'Administrador';
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+      SnackBar(
+        content: Text(mensaje),
+      ),
+    );
+  }
 
-      default:
-        return 'Usuario';
-    }
+  @override
+  void dispose() {
+    nombreController.dispose();
+    correoController.dispose();
+    super.dispose();
   }
 
   @override
@@ -111,8 +286,10 @@ class _PerfilScreenState extends State<PerfilScreen> {
     if (cargando) {
       return const Scaffold(
         body: Center(
-          child: CircularProgressIndicator(
-            color: Color(0xFFFF7E01),
+          child:
+              CircularProgressIndicator(
+            color:
+                AppColors.naranja,
           ),
         ),
       );
@@ -120,64 +297,249 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mi perfil'),
+        title: const Text(
+          'Mi perfil',
+        ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          const Center(
-            child: CircleAvatar(
-              radius: 55,
-              backgroundColor: Color(0xFFFF7E01),
-              child: Icon(
-                Icons.person,
-                size: 65,
-                color: Colors.white,
+
+      body: RefreshIndicator(
+        onRefresh: cargarPerfil,
+
+        child: ListView(
+          physics:
+              const AlwaysScrollableScrollPhysics(),
+
+          padding:
+              const EdgeInsets.all(
+            24,
+          ),
+
+          children: [
+            Center(
+              child: Stack(
+                clipBehavior:
+                    Clip.none,
+
+                children: [
+                  CircleAvatar(
+                    radius: 60,
+
+                    backgroundColor:
+                        AppColors.naranja,
+
+                    backgroundImage:
+                        fotoPerfilUrl != null &&
+                                fotoPerfilUrl!
+                                    .isNotEmpty
+                            ? NetworkImage(
+                                fotoPerfilUrl!,
+                              )
+                            : null,
+
+                    child:
+                        fotoPerfilUrl == null ||
+                                fotoPerfilUrl!
+                                    .isEmpty
+                            ? const Icon(
+                                Icons.person,
+                                size: 70,
+                                color:
+                                    Colors.white,
+                              )
+                            : null,
+                  ),
+
+                  Positioned(
+                    right: -2,
+                    bottom: -2,
+
+                    child: Material(
+                      color:
+                          AppColors.naranja,
+
+                      shape:
+                          const CircleBorder(),
+
+                      child: IconButton(
+                        tooltip:
+                            'Cambiar foto',
+
+                        onPressed:
+                            subiendoFoto
+                                ? null
+                                : mostrarOpcionesFoto,
+
+                        icon:
+                            subiendoFoto
+                                ? const SizedBox(
+                                    width:
+                                        20,
+                                    height:
+                                        20,
+
+                                    child:
+                                        CircularProgressIndicator(
+                                      strokeWidth:
+                                          2,
+                                      color:
+                                          Colors.white,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons
+                                        .camera_alt,
+                                    color:
+                                        Colors.white,
+                                  ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          const SizedBox(height: 20),
-          Center(
-            child: Text(
-              nombre.isEmpty ? 'Usuario' : nombre,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 25,
-                fontWeight: FontWeight.bold,
+
+            const SizedBox(
+              height: 30,
+            ),
+
+            TextField(
+              controller:
+                  nombreController,
+
+              textInputAction:
+                  TextInputAction.next,
+
+              decoration:
+                  const InputDecoration(
+                labelText:
+                    'Nombre',
+
+                prefixIcon:
+                    Icon(
+                  Icons.person_outline,
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 35),
-          Card(
-            child: ListTile(
-              leading: const Icon(
-                Icons.email_outlined,
-                color: Color(0xFFFF7E01),
-              ),
-              title: const Text('Correo'),
-              subtitle: Text(correo),
+
+            const SizedBox(
+              height: 18,
             ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(
+
+            TextField(
+              controller:
+                  correoController,
+
+              keyboardType:
+                  TextInputType
+                      .emailAddress,
+
+              textInputAction:
+                  TextInputAction.done,
+
+              decoration:
+                  const InputDecoration(
+                labelText:
+                    'Correo electrónico',
+
+                prefixIcon:
+                    Icon(
+                  Icons.email_outlined,
+                ),
+              ),
+            ),
+
+            const SizedBox(
+              height: 18,
+            ),
+
+            ListTile(
+              contentPadding:
+                  EdgeInsets.zero,
+
+              leading:
+                  const Icon(
                 Icons.badge_outlined,
-                color: Color(0xFFFF7E01),
+                color:
+                    AppColors.naranja,
               ),
-              title: const Text('Tipo de cuenta'),
-              subtitle: Text(obtenerNombreRol()),
+
+              title:
+                  const Text(
+                'Tipo de cuenta',
+              ),
+
+              subtitle:
+                  Text(
+                rol.isEmpty
+                    ? 'Sin rol'
+                    : rol,
+              ),
             ),
-          ),
-          const SizedBox(height: 35),
-          SizedBox(
-            height: 50,
-            child: ElevatedButton.icon(
-              onPressed: cerrarSesion,
-              icon: const Icon(Icons.logout),
-              label: const Text('Cerrar sesión'),
+
+            const SizedBox(
+              height: 25,
             ),
-          ),
-        ],
+
+            SizedBox(
+              height: 50,
+
+              child:
+                  ElevatedButton.icon(
+                onPressed:
+                    guardando
+                        ? null
+                        : guardarPerfil,
+
+                icon:
+                    guardando
+                        ? const SizedBox(
+                            width:
+                                22,
+                            height:
+                                22,
+
+                            child:
+                                CircularProgressIndicator(
+                              strokeWidth:
+                                  2,
+                              color:
+                                  Colors.white,
+                            ),
+                          )
+                        : const Icon(
+                            Icons
+                                .save_outlined,
+                          ),
+
+                label:
+                    Text(
+                  guardando
+                      ? 'Guardando...'
+                      : 'Guardar cambios',
+                ),
+              ),
+            ),
+
+            const SizedBox(
+              height: 15,
+            ),
+
+            OutlinedButton.icon(
+              onPressed:
+                  cerrarSesion,
+
+              icon:
+                  const Icon(
+                Icons.logout,
+              ),
+
+              label:
+                  const Text(
+                'Cerrar sesión',
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

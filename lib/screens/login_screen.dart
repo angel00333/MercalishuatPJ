@@ -5,6 +5,8 @@ import '../services/theme_service.dart';
 import 'home_emprendedor_screen.dart';
 import 'home_usuario_screen.dart';
 import 'registro_screen.dart';
+import 'navigation/usuario_nav_screen.dart';
+import 'navigation/emprendedor_nav_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final ThemeService themeService;
@@ -53,26 +55,24 @@ class _LoginScreenState extends State<LoginScreen> {
       final rol = resultado['rol'];
 
       if (rol == 'emprendedor') {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(
-            builder: (_) => HomeEmprendedorScreen(
-              themeService: widget.themeService,
-            ),
-          ),
-          (route) => false,
-        );
-      } else {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(
-            builder: (_) => HomeUsuarioScreen(
-              themeService: widget.themeService,
-            ),
-          ),
-          (route) => false,
-        );
-      }
+  Navigator.pushReplacement(
+    context,
+    MaterialPageRoute(
+      builder: (_) => EmprendedorNavScreen(
+        themeService: widget.themeService,
+      ),
+    ),
+  );
+} else {
+  Navigator.pushReplacement(
+    context,
+    MaterialPageRoute(
+      builder: (_) => UsuarioNavScreen(
+        themeService: widget.themeService,
+      ),
+    ),
+  );
+}
     } else {
       mostrarMensaje(
         resultado['message'] ?? 'No se pudo iniciar sesión',

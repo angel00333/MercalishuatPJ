@@ -111,22 +111,37 @@ class _DetalleTiendaScreenState
           20,
         ),
         children: [
-          const Center(
-            child:
-                CircleAvatar(
-              radius: 55,
-              backgroundColor:
-                  Color(
-                0xFFFF7E01,
-              ),
-              child: Icon(
+          Center(
+  child: CircleAvatar(
+    radius: 55,
+
+    backgroundColor:
+        const Color(
+      0xFFFF7E01,
+    ),
+
+    backgroundImage:
+        tienda.imagenUrl != null &&
+                tienda.imagenUrl!
+                    .isNotEmpty
+            ? NetworkImage(
+                tienda.imagenUrl!,
+              )
+            : null,
+
+    child:
+        tienda.imagenUrl == null ||
+                tienda.imagenUrl!
+                    .isEmpty
+            ? const Icon(
                 Icons.storefront,
                 size: 60,
                 color:
                     Colors.white,
-              ),
-            ),
-          ),
+              )
+            : null,
+  ),
+),
 
           const SizedBox(
             height: 15,

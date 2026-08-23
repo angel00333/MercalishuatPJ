@@ -67,6 +67,12 @@ class ApiConfig {
   static String imagenesProducto(int productoId) {
     return '$baseUrl/imagenes/producto/$productoId';
   }
+  static const String fotoPerfil =
+      '$baseUrl/perfil/foto';
+
+  static const String imagenEmprendimiento =
+      '$baseUrl/emprendimientos/imagen';
+
 
   static String imagenPrincipal({
     required int productoId,
