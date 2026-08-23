@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../services/theme_service.dart';
 import 'configuracion_screen.dart';
 import 'perfil_screen.dart';
+import 'tienda_actions/mi_tienda_screen.dart';
+import 'producto_actions/productos_screen.dart';
 
 class HomeEmprendedorScreen extends StatelessWidget {
   final ThemeService themeService;
@@ -50,42 +52,73 @@ class HomeEmprendedorScreen extends StatelessWidget {
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
-        children: const [
-          Text(
+        children: [
+          const Text(
             'Panel del emprendedor',
             style: TextStyle(
               fontSize: 27,
               fontWeight: FontWeight.bold,
             ),
           ),
-          SizedBox(height: 8),
-          Text(
+          const SizedBox(height: 8),
+          const Text(
             'Administra tu emprendimiento desde Mercalishuat.',
           ),
-          SizedBox(height: 30),
+          const SizedBox(height: 30),
+
+            Card(
+              child: ListTile(
+                leading: const Icon(
+                  Icons.inventory_2_outlined,
+                  color: Color(0xFFFF7E01),
+                ),
+                title: const Text(
+                  'Productos',
+                ),
+                subtitle: const Text(
+                  'Administra tu catálogo',
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const ProductosScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
           Card(
             child: ListTile(
-              leading: Icon(
+              leading: const Icon(
                 Icons.storefront,
                 color: Color(0xFFFF7E01),
               ),
-              title: Text('Mi tienda'),
-              subtitle: Text('Disponible en Beta 2'),
-              trailing: Icon(Icons.chevron_right),
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: Icon(
-                Icons.inventory_2_outlined,
-                color: Color(0xFFFF7E01),
+              title: const Text('Mi tienda'),
+              subtitle: const Text(
+                'Administra tu emprendimiento',
               ),
-              title: Text('Productos'),
-              subtitle: Text('Disponible en Beta 2'),
-              trailing: Icon(Icons.chevron_right),
+              trailing: const Icon(
+                Icons.chevron_right,
+              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MiTiendaScreen(
+                      themeService: themeService,
+                    ),
+                  ),
+                );
+              },
             ),
           ),
-          Card(
+
+          const Card(
             child: ListTile(
               leading: Icon(
                 Icons.add_photo_alternate_outlined,
@@ -96,7 +129,8 @@ class HomeEmprendedorScreen extends StatelessWidget {
               trailing: Icon(Icons.chevron_right),
             ),
           ),
-          Card(
+
+          const Card(
             child: ListTile(
               leading: Icon(
                 Icons.map_outlined,
@@ -107,7 +141,8 @@ class HomeEmprendedorScreen extends StatelessWidget {
               trailing: Icon(Icons.chevron_right),
             ),
           ),
-          Card(
+
+          const Card(
             child: ListTile(
               leading: Icon(
                 Icons.chat_outlined,

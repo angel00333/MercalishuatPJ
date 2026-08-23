@@ -1,8 +1,11 @@
+// lib/screens/home_usuario_screen.dart
+
 import 'package:flutter/material.dart';
 
 import '../services/theme_service.dart';
 import 'configuracion_screen.dart';
 import 'perfil_screen.dart';
+import 'explorar/explorar_emprendimientos_screen.dart';
 
 class HomeUsuarioScreen extends StatelessWidget {
   final ThemeService themeService;
@@ -50,64 +53,81 @@ class HomeUsuarioScreen extends StatelessWidget {
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
-        children: const [
-          Text(
+        children: [
+          const Text(
             '¡Hola!',
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
             ),
           ),
-          SizedBox(height: 8),
-          Text(
+          const SizedBox(height: 8),
+          const Text(
             'Descubre emprendimientos salvadoreños.',
             style: TextStyle(
               fontSize: 17,
             ),
           ),
-          SizedBox(height: 30),
+          const SizedBox(height: 30),
+
           Card(
             child: ListTile(
-              leading: Icon(
+              leading: const Icon(
                 Icons.search,
                 color: Color(0xFFFF7E01),
               ),
-              title: Text('Explorar emprendimientos'),
-              subtitle: Text('Disponible en Beta 2'),
-              trailing: Icon(Icons.chevron_right),
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: Icon(
-                Icons.storefront_outlined,
-                color: Color(0xFFFF7E01),
+              title: const Text(
+                'Explorar emprendimientos',
               ),
-              title: Text('Tiendas'),
-              subtitle: Text('Disponible en Beta 2'),
-              trailing: Icon(Icons.chevron_right),
+              subtitle: const Text(
+                'Descubre tiendas y productos',
+              ),
+              trailing: const Icon(
+                Icons.chevron_right,
+              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const ExplorarEmprendimientosScreen(),
+                  ),
+                );
+              },
             ),
           ),
-          Card(
+
+          const Card(
             child: ListTile(
               leading: Icon(
                 Icons.map_outlined,
                 color: Color(0xFFFF7E01),
               ),
               title: Text('Mapa'),
-              subtitle: Text('Disponible en Beta 4'),
-              trailing: Icon(Icons.chevron_right),
+              subtitle: Text(
+                'Disponible en Beta 4',
+              ),
+              trailing: Icon(
+                Icons.chevron_right,
+              ),
             ),
           ),
-          Card(
+
+          const Card(
             child: ListTile(
               leading: Icon(
                 Icons.favorite_border,
                 color: Color(0xFFFF7E01),
               ),
-              title: Text('Mis favoritos'),
-              subtitle: Text('Disponible próximamente'),
-              trailing: Icon(Icons.chevron_right),
+              title: Text(
+                'Mis favoritos',
+              ),
+              subtitle: Text(
+                'Disponible próximamente',
+              ),
+              trailing: Icon(
+                Icons.chevron_right,
+              ),
             ),
           ),
         ],
