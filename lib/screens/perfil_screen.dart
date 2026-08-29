@@ -6,7 +6,15 @@ import '../services/auth_service.dart';
 import '../services/perfil_imagen_service.dart';
 import '../services/session_service.dart';
 import '../services/theme_service.dart';
+
+import 'configuracion_screen.dart';
 import 'login_screen.dart';
+
+import 'publicaciones/guardados_screen.dart';
+import 'publicaciones/mis_publicaciones_screen.dart';
+
+import 'producto_actions/productos_screen.dart';
+import 'tienda_actions/mi_tienda_screen.dart';
 
 class PerfilScreen extends StatefulWidget {
   final ThemeService themeService;
@@ -29,9 +37,11 @@ class _PerfilScreenState
   final TextEditingController correoController =
       TextEditingController();
 
-  final ImagePicker picker = ImagePicker();
+  final ImagePicker picker =
+      ImagePicker();
 
   String rol = '';
+
   String? fotoPerfilUrl;
 
   bool cargando = true;
@@ -41,8 +51,13 @@ class _PerfilScreenState
   @override
   void initState() {
     super.initState();
+
     cargarPerfil();
   }
+
+  // ============================================
+  // CARGAR PERFIL
+  // ============================================
 
   Future<void> cargarPerfil() async {
     if (mounted) {
@@ -54,24 +69,32 @@ class _PerfilScreenState
     final resultado =
         await AuthService.obtenerPerfil();
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     if (resultado['success'] == true) {
       final usuario =
-          resultado['usuario'] as Map<String, dynamic>?;
+          resultado['usuario'];
 
       if (usuario != null) {
         nombreController.text =
-            usuario['nombre']?.toString() ?? '';
+            usuario['nombre']?.toString() ??
+                '';
 
         correoController.text =
-            usuario['correo']?.toString() ?? '';
+            usuario['correo']?.toString() ??
+                '';
 
         rol =
-            usuario['rol']?.toString() ?? '';
+            usuario['rol']
+                    ?.toString()
+                    .toLowerCase() ??
+                '';
 
         fotoPerfilUrl =
-            usuario['foto_perfil_url']?.toString();
+            usuario['foto_perfil_url']
+                ?.toString();
       }
     } else {
       mostrarMensaje(
@@ -85,6 +108,10 @@ class _PerfilScreenState
     });
   }
 
+  // ============================================
+  // GUARDAR PERFIL
+  // ============================================
+
   Future<void> guardarPerfil() async {
     final nombre =
         nombreController.text.trim();
@@ -97,6 +124,7 @@ class _PerfilScreenState
       mostrarMensaje(
         'Completa nombre y correo',
       );
+
       return;
     }
 
@@ -110,18 +138,15 @@ class _PerfilScreenState
       correo: correo,
     );
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     setState(() {
       guardando = false;
     });
 
     if (resultado['success'] == true) {
-      await SessionService.actualizarDatos(
-        nombre: nombre,
-        correo: correo,
-      );
-
       mostrarMensaje(
         resultado['message'] ??
             'Perfil actualizado correctamente',
@@ -136,6 +161,10 @@ class _PerfilScreenState
     );
   }
 
+  // ============================================
+  // FOTO PERFIL
+  // ============================================
+
   Future<void> elegirFoto(
     ImageSource source,
   ) async {
@@ -147,7 +176,9 @@ class _PerfilScreenState
         maxWidth: 1200,
       );
 
-      if (imagen == null) return;
+      if (imagen == null) {
+        return;
+      }
 
       setState(() {
         subiendoFoto = true;
@@ -159,7 +190,9 @@ class _PerfilScreenState
         imagen,
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         subiendoFoto = false;
@@ -167,19 +200,20 @@ class _PerfilScreenState
 
       if (resultado['success'] == true) {
         final nuevaUrl =
-            resultado['foto_perfil_url']
+            resultado[
+                    'foto_perfil_url']
                 ?.toString();
 
         if (nuevaUrl != null &&
             nuevaUrl.isNotEmpty) {
           setState(() {
-            fotoPerfilUrl = nuevaUrl;
+            fotoPerfilUrl =
+                nuevaUrl;
           });
         }
 
         mostrarMensaje(
-          resultado['message'] ??
-              'Foto actualizada correctamente',
+          'Foto actualizada correctamente',
         );
 
         return;
@@ -190,7 +224,9 @@ class _PerfilScreenState
             'No se pudo subir la foto',
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         subiendoFoto = false;
@@ -210,29 +246,40 @@ class _PerfilScreenState
           child: Wrap(
             children: [
               ListTile(
-                leading: const Icon(
-                  Icons.photo_library_outlined,
+                leading:
+                    const Icon(
+                  Icons
+                      .photo_library_outlined,
                 ),
-                title: const Text(
+                title:
+                    const Text(
                   'Elegir de galería',
                 ),
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(
+                    context,
+                  );
 
                   elegirFoto(
                     ImageSource.gallery,
                   );
                 },
               ),
+
               ListTile(
-                leading: const Icon(
-                  Icons.camera_alt_outlined,
+                leading:
+                    const Icon(
+                  Icons
+                      .camera_alt_outlined,
                 ),
-                title: const Text(
+                title:
+                    const Text(
                   'Tomar foto',
                 ),
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(
+                    context,
+                  );
 
                   elegirFoto(
                     ImageSource.camera,
@@ -246,15 +293,22 @@ class _PerfilScreenState
     );
   }
 
+  // ============================================
+  // CERRAR SESIÓN
+  // ============================================
+
   Future<void> cerrarSesion() async {
     await SessionService.cerrarSesion();
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (_) => LoginScreen(
+        builder: (_) =>
+            LoginScreen(
           themeService:
               widget.themeService,
         ),
@@ -263,13 +317,84 @@ class _PerfilScreenState
     );
   }
 
-  void mostrarMensaje(String mensaje) {
-    if (!mounted) return;
+  // ============================================
+  // NAVEGACIÓN
+  // ============================================
+
+  Future<void> abrirGuardados() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const GuardadosScreen(),
+      ),
+    );
+  }
+
+  Future<void>
+      abrirMisPublicaciones() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const MisPublicacionesScreen(),
+      ),
+    );
+  }
+
+  Future<void> abrirProductos() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const ProductosScreen(),
+      ),
+    );
+  }
+
+  Future<void> abrirMiTienda() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            MiTiendaScreen(
+          themeService:
+              widget.themeService,
+        ),
+      ),
+    );
+  }
+
+  Future<void>
+      abrirConfiguracion() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            ConfiguracionScreen(
+          themeService:
+              widget.themeService,
+        ),
+      ),
+    );
+  }
+
+  // ============================================
+  // MENSAJE
+  // ============================================
+
+  void mostrarMensaje(
+    String mensaje,
+  ) {
+    if (!mounted) {
+      return;
+    }
 
     ScaffoldMessenger.of(context)
         .showSnackBar(
       SnackBar(
-        content: Text(mensaje),
+        content:
+            Text(mensaje),
       ),
     );
   }
@@ -278,11 +403,18 @@ class _PerfilScreenState
   void dispose() {
     nombreController.dispose();
     correoController.dispose();
+
     super.dispose();
   }
 
+  // ============================================
+  // BUILD
+  // ============================================
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     if (cargando) {
       return const Scaffold(
         body: Center(
@@ -295,15 +427,20 @@ class _PerfilScreenState
       );
     }
 
+    final esEmprendedor =
+        rol == 'emprendedor';
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
+        title:
+            const Text(
           'Mi perfil',
         ),
       ),
 
       body: RefreshIndicator(
-        onRefresh: cargarPerfil,
+        onRefresh:
+            cargarPerfil,
 
         child: ListView(
           physics:
@@ -311,10 +448,14 @@ class _PerfilScreenState
 
           padding:
               const EdgeInsets.all(
-            24,
+            20,
           ),
 
           children: [
+            // =================================
+            // FOTO
+            // =================================
+
             Center(
               child: Stack(
                 clipBehavior:
@@ -328,7 +469,8 @@ class _PerfilScreenState
                         AppColors.naranja,
 
                     backgroundImage:
-                        fotoPerfilUrl != null &&
+                        fotoPerfilUrl !=
+                                    null &&
                                 fotoPerfilUrl!
                                     .isNotEmpty
                             ? NetworkImage(
@@ -337,7 +479,8 @@ class _PerfilScreenState
                             : null,
 
                     child:
-                        fotoPerfilUrl == null ||
+                        fotoPerfilUrl ==
+                                    null ||
                                 fotoPerfilUrl!
                                     .isEmpty
                             ? const Icon(
@@ -350,8 +493,8 @@ class _PerfilScreenState
                   ),
 
                   Positioned(
-                    right: -2,
-                    bottom: -2,
+                    right: -3,
+                    bottom: -3,
 
                     child: Material(
                       color:
@@ -360,7 +503,8 @@ class _PerfilScreenState
                       shape:
                           const CircleBorder(),
 
-                      child: IconButton(
+                      child:
+                          IconButton(
                         tooltip:
                             'Cambiar foto',
 
@@ -372,10 +516,8 @@ class _PerfilScreenState
                         icon:
                             subiendoFoto
                                 ? const SizedBox(
-                                    width:
-                                        20,
-                                    height:
-                                        20,
+                                    width: 20,
+                                    height: 20,
 
                                     child:
                                         CircularProgressIndicator(
@@ -399,15 +541,70 @@ class _PerfilScreenState
             ),
 
             const SizedBox(
+              height: 20,
+            ),
+
+            Text(
+              nombreController.text,
+
+              textAlign:
+                  TextAlign.center,
+
+              style:
+                  const TextStyle(
+                fontSize: 24,
+                fontWeight:
+                    FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(
+              height: 5,
+            ),
+
+            Text(
+              esEmprendedor
+                  ? 'Emprendedor'
+                  : 'Usuario',
+
+              textAlign:
+                  TextAlign.center,
+
+              style:
+                  const TextStyle(
+                color:
+                    AppColors.naranja,
+                fontWeight:
+                    FontWeight.w600,
+              ),
+            ),
+
+            const SizedBox(
               height: 30,
+            ),
+
+            // =================================
+            // DATOS
+            // =================================
+
+            const Text(
+              'Datos personales',
+
+              style:
+                  TextStyle(
+                fontSize: 18,
+                fontWeight:
+                    FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(
+              height: 15,
             ),
 
             TextField(
               controller:
                   nombreController,
-
-              textInputAction:
-                  TextInputAction.next,
 
               decoration:
                   const InputDecoration(
@@ -416,13 +613,14 @@ class _PerfilScreenState
 
                 prefixIcon:
                     Icon(
-                  Icons.person_outline,
+                  Icons
+                      .person_outline,
                 ),
               ),
             ),
 
             const SizedBox(
-              height: 18,
+              height: 15,
             ),
 
             TextField(
@@ -433,9 +631,6 @@ class _PerfilScreenState
                   TextInputType
                       .emailAddress,
 
-              textInputAction:
-                  TextInputAction.done,
-
               decoration:
                   const InputDecoration(
                 labelText:
@@ -443,41 +638,14 @@ class _PerfilScreenState
 
                 prefixIcon:
                     Icon(
-                  Icons.email_outlined,
+                  Icons
+                      .email_outlined,
                 ),
               ),
             ),
 
             const SizedBox(
-              height: 18,
-            ),
-
-            ListTile(
-              contentPadding:
-                  EdgeInsets.zero,
-
-              leading:
-                  const Icon(
-                Icons.badge_outlined,
-                color:
-                    AppColors.naranja,
-              ),
-
-              title:
-                  const Text(
-                'Tipo de cuenta',
-              ),
-
-              subtitle:
-                  Text(
-                rol.isEmpty
-                    ? 'Sin rol'
-                    : rol,
-              ),
-            ),
-
-            const SizedBox(
-              height: 25,
+              height: 20,
             ),
 
             SizedBox(
@@ -493,10 +661,8 @@ class _PerfilScreenState
                 icon:
                     guardando
                         ? const SizedBox(
-                            width:
-                                22,
-                            height:
-                                22,
+                            width: 22,
+                            height: 22,
 
                             child:
                                 CircularProgressIndicator(
@@ -521,8 +687,127 @@ class _PerfilScreenState
             ),
 
             const SizedBox(
-              height: 15,
+              height: 35,
             ),
+
+            // =================================
+            // PANEL
+            // =================================
+
+            Text(
+              esEmprendedor
+                  ? 'Panel del emprendedor'
+                  : 'Mi cuenta',
+
+              style:
+                  const TextStyle(
+                fontSize: 18,
+                fontWeight:
+                    FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(
+              height: 12,
+            ),
+
+            // =================================
+            // OPCIONES EMPRENDEDOR
+            // =================================
+
+            if (esEmprendedor) ...[
+              _opcion(
+                icon:
+                    Icons
+                        .article_outlined,
+
+                titulo:
+                    'Mis publicaciones',
+
+                descripcion:
+                    'Crear, editar y administrar publicaciones',
+
+                onTap:
+                    abrirMisPublicaciones,
+              ),
+
+              _opcion(
+                icon:
+                    Icons
+                        .inventory_2_outlined,
+
+                titulo:
+                    'Productos',
+
+                descripcion:
+                    'Administrar productos de tu tienda',
+
+                onTap:
+                    abrirProductos,
+              ),
+
+              _opcion(
+                icon:
+                    Icons
+                        .storefront_outlined,
+
+                titulo:
+                    'Mi tienda',
+
+                descripcion:
+                    'Editar información de tu emprendimiento',
+
+                onTap:
+                    abrirMiTienda,
+              ),
+            ],
+
+            // =================================
+            // OPCIONES USUARIO
+            // =================================
+
+            if (!esEmprendedor)
+              _opcion(
+                icon:
+                    Icons
+                        .bookmark_outline,
+
+                titulo:
+                    'Guardados',
+
+                descripcion:
+                    'Publicaciones que has guardado',
+
+                onTap:
+                    abrirGuardados,
+              ),
+
+            // =================================
+            // CONFIGURACIÓN
+            // =================================
+
+            _opcion(
+              icon:
+                  Icons
+                      .settings_outlined,
+
+              titulo:
+                  'Configuración',
+
+              descripcion:
+                  'Tema y preferencias de la aplicación',
+
+              onTap:
+                  abrirConfiguracion,
+            ),
+
+            const SizedBox(
+              height: 20,
+            ),
+
+            // =================================
+            // LOGOUT
+            // =================================
 
             OutlinedButton.icon(
               onPressed:
@@ -538,7 +823,82 @@ class _PerfilScreenState
                 'Cerrar sesión',
               ),
             ),
+
+            const SizedBox(
+              height: 30,
+            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================
+  // ITEM DEL PANEL
+  // ============================================
+
+  Widget _opcion({
+    required IconData icon,
+    required String titulo,
+    required String descripcion,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      margin:
+          const EdgeInsets.only(
+        bottom: 10,
+      ),
+
+      child: ListTile(
+        onTap:
+            onTap,
+
+        leading:
+            Container(
+          width: 46,
+          height: 46,
+
+          decoration:
+              BoxDecoration(
+            color:
+                AppColors.naranja
+                    .withValues(
+              alpha: 0.12,
+            ),
+
+            borderRadius:
+                BorderRadius.circular(
+              12,
+            ),
+          ),
+
+          child:
+              Icon(
+            icon,
+            color:
+                AppColors.naranja,
+          ),
+        ),
+
+        title:
+            Text(
+          titulo,
+
+          style:
+              const TextStyle(
+            fontWeight:
+                FontWeight.w600,
+          ),
+        ),
+
+        subtitle:
+            Text(
+          descripcion,
+        ),
+
+        trailing:
+            const Icon(
+          Icons.chevron_right,
         ),
       ),
     );

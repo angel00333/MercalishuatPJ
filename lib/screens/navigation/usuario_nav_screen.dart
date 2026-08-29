@@ -1,12 +1,11 @@
-// lib/screens/navigation/usuario_nav_screen.dart
-
 import 'package:flutter/material.dart';
+import 'package:mercalishuat/screens/navigation/emprendedor_nav_screen.dart';
 
 import '../../services/theme_service.dart';
-import '../configuracion_screen.dart';
 import '../explorar/explorar_emprendimientos_screen.dart';
 import '../home_usuario_screen.dart';
 import '../perfil_screen.dart';
+import '../publicaciones/feed_screen.dart';
 
 class UsuarioNavScreen extends StatefulWidget {
   final ThemeService themeService;
@@ -32,11 +31,9 @@ class _UsuarioNavScreenState
     super.initState();
 
     paginas = [
-      const RecientesUsuarioScreen(),
+      const FeedScreen(),
       const ExplorarEmprendimientosScreen(),
-      HomeUsuarioTab(
-        themeService: widget.themeService,
-      ),
+      const MapaScreen(),
       const TiendasUsuarioScreen(),
       PerfilScreen(
         themeService: widget.themeService,
@@ -57,28 +54,48 @@ class _UsuarioNavScreenState
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.access_time_outlined),
-            selectedIcon: Icon(Icons.access_time),
+            icon: Icon(
+              Icons.access_time_outlined,
+            ),
+            selectedIcon: Icon(
+              Icons.access_time,
+            ),
             label: 'Recientes',
           ),
           NavigationDestination(
-            icon: Icon(Icons.search_outlined),
-            selectedIcon: Icon(Icons.search),
+            icon: Icon(
+              Icons.search_outlined,
+            ),
+            selectedIcon: Icon(
+              Icons.search,
+            ),
             label: 'Explorar',
           ),
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Inicio',
+            icon: Icon(
+              Icons.map_outlined,
+            ),
+            selectedIcon: Icon(
+              Icons.map,
+            ),
+            label: 'Mapa',
           ),
           NavigationDestination(
-            icon: Icon(Icons.storefront_outlined),
-            selectedIcon: Icon(Icons.storefront),
+            icon: Icon(
+              Icons.storefront_outlined,
+            ),
+            selectedIcon: Icon(
+              Icons.storefront,
+            ),
             label: 'Tiendas',
           ),
           NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
+            icon: Icon(
+              Icons.person_outline,
+            ),
+            selectedIcon: Icon(
+              Icons.person,
+            ),
             label: 'Perfil',
           ),
         ],
@@ -103,23 +120,10 @@ class HomeUsuarioTab extends StatelessWidget {
   }
 }
 
-class RecientesUsuarioScreen extends StatelessWidget {
-  const RecientesUsuarioScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Text(
-          'Aquí irán las publicaciones recientes',
-        ),
-      ),
-    );
-  }
-}
-
 class TiendasUsuarioScreen extends StatelessWidget {
-  const TiendasUsuarioScreen({super.key});
+  const TiendasUsuarioScreen({
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {

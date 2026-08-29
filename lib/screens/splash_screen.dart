@@ -5,6 +5,8 @@ import '../services/theme_service.dart';
 import 'home_emprendedor_screen.dart';
 import 'home_usuario_screen.dart';
 import 'login_screen.dart';
+import 'navigation/usuario_nav_screen.dart';
+import 'navigation/emprendedor_nav_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   final ThemeService themeService;
@@ -62,7 +64,7 @@ class _SplashScreenState
         context,
         MaterialPageRoute(
           builder: (_) =>
-              HomeEmprendedorScreen(
+              EmprendedorNavScreen(
             themeService:
                 widget.themeService,
           ),
@@ -73,7 +75,7 @@ class _SplashScreenState
         context,
         MaterialPageRoute(
           builder: (_) =>
-              HomeUsuarioScreen(
+              UsuarioNavScreen(
             themeService:
                 widget.themeService,
           ),

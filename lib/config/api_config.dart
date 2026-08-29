@@ -87,4 +87,56 @@ class ApiConfig {
   }) {
     return '$baseUrl/imagenes/producto/$productoId/$imagenId';
   }
+
+  // =========================
+  // PUBLICACIONES
+  // =========================
+static const String publicaciones =
+    '$baseUrl/publicaciones';
+
+static const String feed =
+    '$publicaciones/feed';
+
+static const String misPublicaciones =
+    '$publicaciones/mis-publicaciones';
+
+static const String guardados =
+    '$publicaciones/guardados';
+
+static String publicacion(
+  int id,
+) =>
+    '$publicaciones/$id';
+
+static String imagenesPublicacion(
+  int id,
+) =>
+    '$publicaciones/$id/imagenes';
+
+static String meGusta(
+  int id,
+) =>
+    '$publicaciones/$id/me-gusta';
+
+static String guardarPublicacion(
+  int id,
+) =>
+    '$publicaciones/$id/guardar';
+
+static String comentarios(
+  int id,
+) =>
+    '$publicaciones/$id/comentarios';
+
+static String eliminarComentario(
+  int comentarioId,
+) =>
+    '$publicaciones/comentarios/$comentarioId';
+
+static String responderComentario(
+  int comentarioId,
+) =>
+    '$publicaciones/comentarios/$comentarioId/responder';
 }
+
+  
