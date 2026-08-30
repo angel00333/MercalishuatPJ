@@ -38,7 +38,11 @@ dependencies:
   http_parser: ^4.0.2
   shared_preferences: ^2.5.3
   google_fonts: ^8.2.1
-  image_picker: ^1.1.2
+  image_picker: ^1.1.2 
+  #mapsLibs
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.0
+  flutter_map_geojson: ^1.0.7
   
 
 dev_dependencies:
@@ -67,7 +71,9 @@ flutter:
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
-  uses-material-design: true
+  uses-material-design: true 
+ 
+     
 
   fonts:
     - family: Outfit
@@ -81,6 +87,7 @@ flutter:
         - asset: assets/fonts/Outfit-Bold.ttf
           weight: 700
   assets:
+    - assets/mapas/
     - assets/logo.png
   # To add assets to your application, add an assets section, like this:
   # assets:

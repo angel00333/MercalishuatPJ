@@ -2,11 +2,13 @@
 import 'package:flutter/material.dart';
 
 import '../../services/theme_service.dart';
+import '../mapa_screen.dart' as mapa; 
 import '../explorar/explorar_emprendimientos_screen.dart';
 import '../home_emprendedor_screen.dart';
 import '../perfil_screen.dart';
 import '../producto_actions/productos_screen.dart';
 import '../tienda_actions/mi_tienda_screen.dart';
+
 
 class EmprendedorNavScreen extends StatefulWidget {
   final ThemeService themeService;
@@ -34,7 +36,7 @@ class _EmprendedorNavScreenState
     paginas = [
       const ProductosScreen(),
       const ExplorarEmprendimientosScreen(),
-      const MapaScreen(),
+      const mapa.MapaScreen(),
       MiTiendaScreen(
         themeService: widget.themeService,
       ),
@@ -99,42 +101,6 @@ class HomeEmprendedorTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return HomeEmprendedorScreen(
       themeService: themeService,
-    );
-  }
-}
-
-class MapaScreen extends StatelessWidget {
-  const MapaScreen({
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.map_outlined,
-              size: 90,
-              color: Color(0xFFFF7E01),
-            ),
-            SizedBox(height: 20),
-            Text(
-              'Mapa',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Esta función se implementará posteriormente.',
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
