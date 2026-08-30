@@ -1,9 +1,16 @@
 import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
+
+import '../models/emprendimiento.dart';
+import '../services/emprendimiento_service.dart';
+import '../services/ruta_service.dart';
 
 class MapaScreen extends StatefulWidget {
   const MapaScreen({
@@ -23,6 +30,31 @@ class _MapaScreenState extends State<MapaScreen> {
   MapLibreMapController? _mapController;
 
   Circle? _marcadorUsuario;
+
+  // ============================================================
+  // EMPRENDIMIENTOS
+  // ============================================================
+
+  static const String _sourceEmprendimientos =
+      'merc-emprendimientos-source';
+
+  static const String _layerEmprendimientos =
+      'merc-emprendimientos-layer';
+
+  static const String _iconoTienda =
+      'merc-marker-tienda';
+
+  bool _iconoTiendaCargado =
+      false;
+
+  bool _capaEmprendimientosCargada =
+      false;
+
+  List<Emprendimiento> _emprendimientos =
+      [];
+
+  bool _cargandoEmprendimientos =
+      false;
 
   // ============================================================
   // EL SALVADOR
@@ -46,10 +78,14 @@ class _MapaScreenState extends State<MapaScreen> {
     ),
   );
 
-  static const double _zoomMinimo = 7.4;
-  static const double _zoomMaximo = 19.0;
+  static const double _zoomMinimo =
+      7.4;
 
-  double _zoomActual = 8.5;
+  static const double _zoomMaximo =
+      19.0;
+
+  double _zoomActual =
+      8.5;
 
   // ============================================================
   // ESTILOS
@@ -66,35 +102,52 @@ class _MapaScreenState extends State<MapaScreen> {
   // ============================================================
 
   static const Color _naranjaPrincipal =
-      Color(0xFFFF7E01);
+      Color(
+    0xFFFF7E01,
+  );
+
+  static const Color _verdeRuta =
+      Color(
+    0xFF11C031,
+  );
 
   static const Color _panelOscuro =
-      Color(0xFF2A2045);
+      Color(
+    0xFF2A2045,
+  );
 
   static const Color _fondoOscuro =
-      Color(0xFF171320);
+      Color(
+    0xFF171320,
+  );
 
   static const Color _fondoClaro =
-      Color(0xFFFFF6ED);
+      Color(
+    0xFFFFF6ED,
+  );
 
   // ============================================================
-  // GEOJSON
+  // ADMIN
   // ============================================================
 
   Map<String, dynamic>? _admin0;
+
   Map<String, dynamic>? _admin1;
+
   Map<String, dynamic>? _admin2;
+
   Map<String, dynamic>? _admin3;
 
   Map<String, dynamic>? _mascara;
 
-  // ============================================================
-  // ESTADO MAPA
-  // ============================================================
+  bool _geoJsonCargado =
+      false;
 
-  bool _geoJsonCargado = false;
-  bool _estiloCargado = false;
-  bool _capasCargadas = false;
+  bool _estiloCargado =
+      false;
+
+  bool _capasCargadas =
+      false;
 
   String? _error;
 
@@ -104,7 +157,24 @@ class _MapaScreenState extends State<MapaScreen> {
 
   Position? _posicionUsuario;
 
-  bool _obteniendoUbicacion = false;
+  bool _obteniendoUbicacion =
+      false;
+
+  // ============================================================
+  // RUTA
+  // ============================================================
+
+  bool _rutaCreada =
+      false;
+
+  bool _calculandoRuta =
+      false;
+
+  Emprendimiento? _destinoActual;
+
+  double? _distanciaRuta;
+
+  double? _duracionRuta;
 
   // ============================================================
   // INIT
@@ -115,15 +185,18 @@ class _MapaScreenState extends State<MapaScreen> {
     super.initState();
 
     _cargarGeoJson();
+
+    _cargarEmprendimientos();
   }
 
   // ============================================================
-  // GEOJSON
+  // GEOJSON ADMIN
   // ============================================================
 
   Future<void> _cargarGeoJson() async {
     try {
-      final textos = await Future.wait(
+      final textos =
+          await Future.wait(
         [
           rootBundle.loadString(
             'assets/mapas/SV-Map-ADM0.geojson',
@@ -170,14 +243,21 @@ class _MapaScreenState extends State<MapaScreen> {
       }
 
       setState(() {
-        _geoJsonCargado = true;
-        _error = null;
+        _geoJsonCargado =
+            true;
+
+        _error =
+            null;
       });
 
       if (_estiloCargado) {
         await _agregarCapas();
       }
     } catch (e) {
+      debugPrint(
+        'ERROR GEOJSON: $e',
+      );
+
       if (!mounted) {
         return;
       }
@@ -196,50 +276,65 @@ class _MapaScreenState extends State<MapaScreen> {
   Map<String, dynamic> _crearMascara(
     Map<String, dynamic> admin0,
   ) {
-    final List<dynamic> huecos = [];
+    final List<dynamic> huecos =
+        [];
 
     final features =
         admin0['features'];
 
     if (features is List) {
-      for (final feature in features) {
+      for (final feature
+          in features) {
         final geometry =
             feature['geometry'];
 
-        if (geometry == null) {
+        if (geometry ==
+            null) {
           continue;
         }
 
-        final tipo =
+        final String tipo =
             geometry['type']
                     ?.toString() ??
                 '';
 
         final coordinates =
-            geometry['coordinates'];
+            geometry[
+                'coordinates'];
 
-        if (tipo == 'Polygon' &&
-            coordinates is List &&
-            coordinates.isNotEmpty) {
+        if (tipo ==
+                'Polygon' &&
+            coordinates
+                is List &&
+            coordinates
+                .isNotEmpty) {
           final exterior =
               coordinates[0];
 
-          if (exterior is List) {
+          if (exterior
+              is List) {
             huecos.add(
-              exterior.reversed.toList(),
+              exterior.reversed
+                  .toList(),
             );
           }
         }
 
-        if (tipo == 'MultiPolygon' &&
-            coordinates is List) {
+        if (tipo ==
+                'MultiPolygon' &&
+            coordinates
+                is List) {
           for (final polygon
               in coordinates) {
-            if (polygon is List &&
-                polygon.isNotEmpty &&
-                polygon[0] is List) {
+            if (polygon
+                    is List &&
+                polygon
+                    .isNotEmpty &&
+                polygon[0]
+                    is List) {
               huecos.add(
-                (polygon[0] as List)
+                (polygon[0]
+                        as List)
                     .reversed
                     .toList(),
               );
@@ -258,14 +353,21 @@ class _MapaScreenState extends State<MapaScreen> {
     ];
 
     return {
-      'type': 'FeatureCollection',
+      'type':
+          'FeatureCollection',
+
       'features': [
         {
-          'type': 'Feature',
+          'type':
+              'Feature',
+
           'properties':
               <String, dynamic>{},
+
           'geometry': {
-            'type': 'Polygon',
+            'type':
+                'Polygon',
+
             'coordinates': [
               exterior,
               ...huecos,
@@ -277,64 +379,404 @@ class _MapaScreenState extends State<MapaScreen> {
   }
 
   // ============================================================
+  // CARGAR EMPRENDIMIENTOS
+  // ============================================================
+
+  Future<void>
+      _cargarEmprendimientos() async {
+    if (_cargandoEmprendimientos) {
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _cargandoEmprendimientos =
+            true;
+      });
+    }
+
+    try {
+      final resultado =
+          await EmprendimientoService
+              .listar();
+
+      if (!mounted) {
+        return;
+      }
+
+      if (resultado['success'] ==
+          true) {
+        final dynamic raw =
+            resultado[
+                'emprendimientos'];
+
+        if (raw is List) {
+          final lista =
+              raw
+                  .whereType<
+                      Emprendimiento>()
+                  .toList();
+
+          setState(() {
+            _emprendimientos =
+                lista.where(
+              (e) =>
+                  e.latitud !=
+                      null &&
+                  e.longitud !=
+                      null,
+            ).toList();
+          });
+
+          debugPrint(
+            '================================',
+          );
+
+          debugPrint(
+            'EMPRENDIMIENTOS CON UBICACIÓN: '
+            '${_emprendimientos.length}',
+          );
+
+          for (final tienda
+              in _emprendimientos) {
+            debugPrint(
+              '${tienda.id} - '
+              '${tienda.nombre} - '
+              '${tienda.latitud}, '
+              '${tienda.longitud}',
+            );
+          }
+
+          debugPrint(
+            '================================',
+          );
+
+          if (_estiloCargado &&
+              _iconoTiendaCargado) {
+            await _dibujarEmprendimientos();
+          }
+        }
+      } else {
+        debugPrint(
+          'Error listando tiendas: '
+          '${resultado['message']}',
+        );
+      }
+    } catch (e) {
+      debugPrint(
+        'ERROR CARGANDO TIENDAS: $e',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _cargandoEmprendimientos =
+              false;
+        });
+      }
+    }
+  }
+
+  // ============================================================
   // MAPA CREADO
   // ============================================================
 
   void _onMapCreated(
     MapLibreMapController controller,
   ) {
-    _mapController = controller;
+    _mapController =
+        controller;
+
+    controller.onFeatureTapped.add(
+      _onFeatureTapped,
+    );
+  }
+
+  // ============================================================
+  // TAP EN EMPRENDIMIENTO
+  // ============================================================
+
+  void _onFeatureTapped(
+    Point<double> point,
+    LatLng coordinates,
+    String id,
+    String layerId,
+    Annotation? annotation,
+  ) {
+    debugPrint(
+      '================================',
+    );
+
+    debugPrint(
+      'FEATURE TOCADA',
+    );
+
+    debugPrint(
+      'ID: $id',
+    );
+
+    debugPrint(
+      'LAYER: $layerId',
+    );
+
+    debugPrint(
+      'COORDENADAS: '
+      '${coordinates.latitude}, '
+      '${coordinates.longitude}',
+    );
+
+    debugPrint(
+      '================================',
+    );
+
+    if (layerId !=
+        _layerEmprendimientos) {
+      return;
+    }
+
+    final int? emprendimientoId =
+        int.tryParse(
+      id,
+    );
+
+    if (emprendimientoId ==
+        null) {
+      debugPrint(
+        'ID inválido: $id',
+      );
+
+      return;
+    }
+
+    Emprendimiento?
+        seleccionado;
+
+    for (final tienda
+        in _emprendimientos) {
+      if (tienda.id ==
+          emprendimientoId) {
+        seleccionado =
+            tienda;
+
+        break;
+      }
+    }
+
+    if (seleccionado ==
+        null) {
+      debugPrint(
+        'NO SE ENCONTRÓ EMPRENDIMIENTO '
+        '$emprendimientoId',
+      );
+
+      return;
+    }
+
+    debugPrint(
+      'TIENDA SELECCIONADA: '
+      '${seleccionado.nombre}',
+    );
+
+    _mostrarOpcionesEmprendimiento(
+      seleccionado,
+    );
   }
 
   // ============================================================
   // ESTILO CARGADO
   // ============================================================
 
-  Future<void> _onStyleLoaded() async {
-    _capasCargadas = false;
-    _marcadorUsuario = null;
+  Future<void>
+      _onStyleLoaded() async {
+    _capasCargadas =
+        false;
+
+    _rutaCreada =
+        false;
+
+    _marcadorUsuario =
+        null;
+
+    _iconoTiendaCargado =
+        false;
+
+    _capaEmprendimientosCargada =
+        false;
 
     if (!mounted) {
       return;
     }
 
     setState(() {
-      _estiloCargado = true;
+      _estiloCargado =
+          true;
     });
 
     if (_geoJsonCargado) {
       await _agregarCapas();
     }
 
-    await _centrarElSalvador();
+    // Primero cargamos el icono.
+    await _cargarIconoTienda();
 
-    // Si el tema cambió y el mapa se reconstruyó,
-    // volvemos a dibujar la ubicación conocida.
-    if (_posicionUsuario != null) {
+    // Luego las tiendas.
+    await _dibujarEmprendimientos();
+
+    if (_posicionUsuario !=
+        null) {
       await _dibujarUbicacion(
         _posicionUsuario!,
         centrar: false,
       );
     }
+
+    await _centrarElSalvador();
   }
 
   // ============================================================
-  // CAPAS ADMINISTRATIVAS
+  // CARGAR ICONO TIENDA
+  //
+  // REDIMENSIONAMOS EL PNG ANTES DE ENTREGARLO A MAPLIBRE.
+  // ESTO CORRIGE EL MARCADOR INVISIBLE EN WEB.
+  // ============================================================
+
+  Future<void>
+      _cargarIconoTienda() async {
+    final controller =
+        _mapController;
+
+    if (controller ==
+            null ||
+        _iconoTiendaCargado) {
+      return;
+    }
+
+    ui.Codec? codec;
+    ui.Image? imagen;
+
+    try {
+      // ========================================================
+      // PNG ORIGINAL
+      // ========================================================
+
+      final ByteData data =
+          await rootBundle.load(
+        'assets/mapas/marcador_tienda.png',
+      );
+
+      final Uint8List
+          bytesOriginales =
+          data.buffer.asUint8List(
+        data.offsetInBytes,
+        data.lengthInBytes,
+      );
+
+      debugPrint(
+        'Marcador original: '
+        '${bytesOriginales.length} bytes',
+      );
+
+      // ========================================================
+      // REDIMENSIONAR
+      //
+      // Dejamos el marcador en 96px de ancho.
+      // La altura se calcula automáticamente.
+      // ========================================================
+
+      codec =
+          await ui.instantiateImageCodec(
+        bytesOriginales,
+        targetWidth:
+            96,
+      );
+
+      final ui.FrameInfo frame =
+          await codec.getNextFrame();
+
+      imagen =
+          frame.image;
+
+      debugPrint(
+        'Marcador redimensionado: '
+        '${imagen.width}x${imagen.height}',
+      );
+
+      // ========================================================
+      // CONVERTIR A PNG
+      // ========================================================
+
+      final ByteData? pngData =
+          await imagen.toByteData(
+        format:
+            ui.ImageByteFormat.png,
+      );
+
+      if (pngData ==
+          null) {
+        throw Exception(
+          'No se pudo convertir el marcador a PNG',
+        );
+      }
+
+      final Uint8List bytesFinales =
+          pngData.buffer.asUint8List(
+        pngData.offsetInBytes,
+        pngData.lengthInBytes,
+      );
+
+      // ========================================================
+      // REGISTRAR EN MAPLIBRE
+      // ========================================================
+
+      await controller.addImage(
+        _iconoTienda,
+        bytesFinales,
+      );
+
+      _iconoTiendaCargado =
+          true;
+
+      debugPrint(
+        '✓ ICONO TIENDA REGISTRADO EN MAPLIBRE',
+      );
+    } catch (e) {
+      _iconoTiendaCargado =
+          false;
+
+      debugPrint(
+        'ERROR ICONO TIENDA: $e',
+      );
+
+      if (mounted) {
+        _mostrarMensaje(
+          'No se pudo cargar el marcador de las tiendas',
+        );
+      }
+    } finally {
+      imagen?.dispose();
+
+      codec?.dispose();
+    }
+  }
+
+  // ============================================================
+  // CAPAS ADMIN
   // ============================================================
 
   Future<void> _agregarCapas() async {
     final controller =
         _mapController;
 
-    if (controller == null ||
+    if (controller ==
+            null ||
         _capasCargadas ||
         !_geoJsonCargado) {
       return;
     }
 
     try {
-      final esOscuro =
-          Theme.of(context).brightness ==
+      final oscuro =
+          Theme.of(context)
+                  .brightness ==
               Brightness.dark;
 
       await controller.addGeoJsonSource(
@@ -363,7 +805,7 @@ class _MapaScreenState extends State<MapaScreen> {
       );
 
       // ========================================================
-      // OCULTAR EXTERIOR DE EL SALVADOR
+      // MÁSCARA
       // ========================================================
 
       await controller.addFillLayer(
@@ -371,27 +813,33 @@ class _MapaScreenState extends State<MapaScreen> {
         'merc-mask-layer',
         FillLayerProperties(
           fillColor:
-              esOscuro
+              oscuro
                   ? '#171320'
                   : '#FFF6ED',
-          fillOpacity: 1.0,
+
+          fillOpacity:
+              1.0,
+
           fillOutlineColor:
-              esOscuro
+              oscuro
                   ? '#171320'
                   : '#FFF6ED',
         ),
       );
 
       // ========================================================
-      // TINTE NARANJA
+      // TINTE
       // ========================================================
 
       await controller.addFillLayer(
         'merc-admin0',
         'merc-orange-overlay',
         const FillLayerProperties(
-          fillColor: '#FF7E01',
-          fillOpacity: 0.035,
+          fillColor:
+              '#FF7E01',
+
+          fillOpacity:
+              0.035,
         ),
       );
 
@@ -403,11 +851,17 @@ class _MapaScreenState extends State<MapaScreen> {
         'merc-admin3',
         'merc-admin3-line',
         const LineLayerProperties(
-          lineColor: '#FFC078',
-          lineOpacity: 0.65,
-          lineWidth: 0.65,
+          lineColor:
+              '#FFC078',
+
+          lineOpacity:
+              0.65,
+
+          lineWidth:
+              0.65,
         ),
-        minzoom: 13.0,
+        minzoom:
+            13,
       );
 
       // ========================================================
@@ -418,11 +872,17 @@ class _MapaScreenState extends State<MapaScreen> {
         'merc-admin2',
         'merc-admin2-line',
         const LineLayerProperties(
-          lineColor: '#FF9A3D',
-          lineOpacity: 0.78,
-          lineWidth: 1.0,
+          lineColor:
+              '#FF9A3D',
+
+          lineOpacity:
+              0.78,
+
+          lineWidth:
+              1,
         ),
-        minzoom: 10.0,
+        minzoom:
+            10,
       );
 
       // ========================================================
@@ -433,11 +893,17 @@ class _MapaScreenState extends State<MapaScreen> {
         'merc-admin1',
         'merc-admin1-line',
         const LineLayerProperties(
-          lineColor: '#FF7E01',
-          lineOpacity: 0.90,
-          lineWidth: 1.5,
+          lineColor:
+              '#FF7E01',
+
+          lineOpacity:
+              0.9,
+
+          lineWidth:
+              1.5,
         ),
-        minzoom: 7.5,
+        minzoom:
+            7.5,
       );
 
       // ========================================================
@@ -448,150 +914,820 @@ class _MapaScreenState extends State<MapaScreen> {
         'merc-admin0',
         'merc-admin0-line',
         const LineLayerProperties(
-          lineColor: '#C95400',
-          lineOpacity: 1.0,
-          lineWidth: 3.0,
+          lineColor:
+              '#C95400',
+
+          lineOpacity:
+              1,
+
+          lineWidth:
+              3,
         ),
       );
 
-      _capasCargadas = true;
+      _capasCargadas =
+          true;
     } catch (e) {
       debugPrint(
-        'Error cargando capas: $e',
+        'ERROR CAPAS ADMIN: $e',
       );
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _error =
-            'Error agregando capas:\n$e';
-      });
     }
   }
 
   // ============================================================
-  // OBTENER UBICACIÓN
+  // DIBUJAR EMPRENDIMIENTOS
   // ============================================================
 
-  Future<void> _obtenerMiUbicacion() async {
-    if (_obteniendoUbicacion) {
+  Future<void>
+      _dibujarEmprendimientos() async {
+    final controller =
+        _mapController;
+
+    if (controller ==
+            null ||
+        !_estiloCargado ||
+        !_iconoTiendaCargado) {
       return;
     }
 
-    setState(() {
-      _obteniendoUbicacion = true;
-    });
-
     try {
-      // ========================================================
-      // GPS / SERVICIO DE UBICACIÓN
-      // ========================================================
+      final features =
+          <Map<String, dynamic>>[];
 
-      final bool servicioActivo =
-          await Geolocator
-              .isLocationServiceEnabled();
-
-      if (!servicioActivo) {
-        if (!mounted) {
-          return;
+      for (final emprendimiento
+          in _emprendimientos) {
+        if (emprendimiento
+                    .latitud ==
+                null ||
+            emprendimiento
+                    .longitud ==
+                null) {
+          continue;
         }
 
-        _mostrarDialogoGpsDesactivado();
+        features.add({
+          'type':
+              'Feature',
 
-        return;
+          // Este ID es el que devuelve
+          // onFeatureTapped.
+          'id':
+              emprendimiento.id
+                  .toString(),
+
+          'properties': {
+            'tipo':
+                'emprendimiento',
+
+            'nombre':
+                emprendimiento
+                    .nombre,
+
+            'emprendimiento_id':
+                emprendimiento
+                    .id,
+          },
+
+          'geometry': {
+            'type':
+                'Point',
+
+            'coordinates': [
+              emprendimiento
+                  .longitud!,
+              emprendimiento
+                  .latitud!,
+            ],
+          },
+        });
       }
 
+      final Map<String, dynamic>
+          geojson = {
+        'type':
+            'FeatureCollection',
+
+        'features':
+            features,
+      };
+
+      debugPrint(
+        'FEATURES EMPRENDIMIENTOS: '
+        '${features.length}',
+      );
+
       // ========================================================
-      // PERMISOS
+      // SI YA EXISTE, ACTUALIZAR
       // ========================================================
 
-      LocationPermission permiso =
-          await Geolocator.checkPermission();
+      if (_capaEmprendimientosCargada) {
+        await controller
+            .setGeoJsonSource(
+          _sourceEmprendimientos,
+          geojson,
+        );
 
-      if (permiso ==
-          LocationPermission.denied) {
-        permiso =
-            await Geolocator
-                .requestPermission();
-      }
-
-      if (permiso ==
-          LocationPermission.denied) {
-        if (!mounted) {
-          return;
-        }
-
-        _mostrarMensaje(
-          'Permiso de ubicación denegado.',
+        debugPrint(
+          '✓ SOURCE TIENDAS ACTUALIZADO',
         );
 
         return;
       }
 
-      if (permiso ==
-          LocationPermission.deniedForever) {
-        if (!mounted) {
-          return;
-        }
+      // ========================================================
+      // SOURCE
+      // ========================================================
 
-        _mostrarDialogoPermisoPermanente();
+      await controller
+          .addGeoJsonSource(
+        _sourceEmprendimientos,
+        geojson,
+      );
 
-        return;
+      // ========================================================
+      // SYMBOL LAYER
+      // ========================================================
+
+      await controller
+          .addSymbolLayer(
+        _sourceEmprendimientos,
+        _layerEmprendimientos,
+        const SymbolLayerProperties(
+          iconImage:
+              _iconoTienda,
+
+          // El PNG ya está reducido
+          // a 96px.
+          //
+          // 0.85 deja un tamaño claro
+          // y visible.
+          iconSize:
+              0.85,
+
+          // La punta inferior del pin
+          // coincide con la coordenada.
+          iconAnchor:
+              'bottom',
+
+          // Nunca ocultar el marcador
+          // por colisiones con textos.
+          iconAllowOverlap:
+              true,
+
+          iconIgnorePlacement:
+              true,
+
+          iconOptional:
+              false,
+
+          iconOpacity:
+              1.0,
+        ),
+
+        // Necesario para recibir taps.
+        enableInteraction:
+            true,
+      );
+
+      _capaEmprendimientosCargada =
+          true;
+
+      debugPrint(
+        '✓ CAPA EMPRENDIMIENTOS CREADA',
+      );
+    } catch (e) {
+      debugPrint(
+        'ERROR DIBUJANDO TIENDAS: $e',
+      );
+    }
+  }
+
+  // ============================================================
+  // OPCIONES DEL EMPRENDIMIENTO
+  // ============================================================
+
+  void _mostrarOpcionesEmprendimiento(
+    Emprendimiento emprendimiento,
+  ) {
+    if (!mounted) {
+      return;
+    }
+
+    showModalBottomSheet(
+      context:
+          context,
+
+      showDragHandle:
+          true,
+
+      isScrollControlled:
+          true,
+
+      builder:
+          (bottomContext) {
+        return SafeArea(
+          child: Padding(
+            padding:
+                const EdgeInsets.fromLTRB(
+              20,
+              4,
+              20,
+              24,
+            ),
+
+            child: Column(
+              mainAxisSize:
+                  MainAxisSize.min,
+
+              crossAxisAlignment:
+                  CrossAxisAlignment
+                      .stretch,
+
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width:
+                          64,
+
+                      height:
+                          64,
+
+                      decoration:
+                          BoxDecoration(
+                        color:
+                            _naranjaPrincipal,
+
+                        borderRadius:
+                            BorderRadius
+                                .circular(
+                          18,
+                        ),
+
+                        image:
+                            emprendimiento
+                                            .imagenUrl !=
+                                        null &&
+                                    emprendimiento
+                                        .imagenUrl!
+                                        .isNotEmpty
+                                ? DecorationImage(
+                                    image:
+                                        NetworkImage(
+                                      emprendimiento
+                                          .imagenUrl!,
+                                    ),
+                                    fit:
+                                        BoxFit.cover,
+                                  )
+                                : null,
+                      ),
+
+                      child:
+                          emprendimiento
+                                          .imagenUrl ==
+                                      null ||
+                                  emprendimiento
+                                      .imagenUrl!
+                                      .isEmpty
+                              ? const Icon(
+                                  Icons.storefront,
+                                  color:
+                                      Colors.white,
+                                  size:
+                                      34,
+                                )
+                              : null,
+                    ),
+
+                    const SizedBox(
+                      width:
+                          14,
+                    ),
+
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment
+                                .start,
+
+                        children: [
+                          Text(
+                            emprendimiento
+                                .nombre,
+
+                            style:
+                                const TextStyle(
+                              fontSize:
+                                  19,
+
+                              fontWeight:
+                                  FontWeight.bold,
+                            ),
+                          ),
+
+                          if (emprendimiento
+                                      .descripcion !=
+                                  null &&
+                              emprendimiento
+                                  .descripcion!
+                                  .isNotEmpty) ...[
+                            const SizedBox(
+                              height:
+                                  4,
+                            ),
+
+                            Text(
+                              emprendimiento
+                                  .descripcion!,
+
+                              maxLines:
+                                  2,
+
+                              overflow:
+                                  TextOverflow
+                                      .ellipsis,
+                            ),
+                          ],
+
+                          const SizedBox(
+                            height:
+                                6,
+                          ),
+
+                          const Row(
+                            children: [
+                              Icon(
+                                Icons.location_on,
+                                color:
+                                    _naranjaPrincipal,
+                                size:
+                                    16,
+                              ),
+
+                              SizedBox(
+                                width:
+                                    4,
+                              ),
+
+                              Text(
+                                'Ubicación disponible',
+
+                                style:
+                                    TextStyle(
+                                  color:
+                                      _naranjaPrincipal,
+
+                                  fontSize:
+                                      12,
+
+                                  fontWeight:
+                                      FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(
+                  height:
+                      24,
+                ),
+
+                // =================================================
+                // PERFIL
+                // =================================================
+
+                SizedBox(
+                  height:
+                      50,
+
+                  child:
+                      OutlinedButton.icon(
+                    onPressed:
+                        () {
+                      Navigator.pop(
+                        bottomContext,
+                      );
+
+                      _mostrarPerfilEmprendimiento(
+                        emprendimiento,
+                      );
+                    },
+
+                    icon:
+                        const Icon(
+                      Icons
+                          .storefront_outlined,
+                    ),
+
+                    label:
+                        const Text(
+                      'Ver perfil del emprendimiento',
+                    ),
+                  ),
+                ),
+
+                const SizedBox(
+                  height:
+                      12,
+                ),
+
+                // =================================================
+                // RUTA
+                // =================================================
+
+                SizedBox(
+                  height:
+                      50,
+
+                  child:
+                      FilledButton.icon(
+                    style:
+                        FilledButton
+                            .styleFrom(
+                      backgroundColor:
+                          _verdeRuta,
+
+                      foregroundColor:
+                          Colors.white,
+                    ),
+
+                    onPressed:
+                        () {
+                      Navigator.pop(
+                        bottomContext,
+                      );
+
+                      _marcarRuta(
+                        emprendimiento,
+                      );
+                    },
+
+                    icon:
+                        const Icon(
+                      Icons.route,
+                    ),
+
+                    label:
+                        const Text(
+                      'Marcar ruta',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // PERFIL EMPRENDIMIENTO
+  // ============================================================
+
+  void _mostrarPerfilEmprendimiento(
+    Emprendimiento emprendimiento,
+  ) {
+    showModalBottomSheet(
+      context:
+          context,
+
+      showDragHandle:
+          true,
+
+      isScrollControlled:
+          true,
+
+      builder:
+          (perfilContext) {
+        return SafeArea(
+          child:
+              SingleChildScrollView(
+            padding:
+                const EdgeInsets.all(
+              24,
+            ),
+
+            child: Column(
+              mainAxisSize:
+                  MainAxisSize.min,
+
+              children: [
+                CircleAvatar(
+                  radius:
+                      52,
+
+                  backgroundColor:
+                      _naranjaPrincipal,
+
+                  backgroundImage:
+                      emprendimiento
+                                  .imagenUrl !=
+                              null &&
+                          emprendimiento
+                              .imagenUrl!
+                              .isNotEmpty
+                          ? NetworkImage(
+                              emprendimiento
+                                  .imagenUrl!,
+                            )
+                          : null,
+
+                  child:
+                      emprendimiento
+                                  .imagenUrl ==
+                              null ||
+                          emprendimiento
+                              .imagenUrl!
+                              .isEmpty
+                          ? const Icon(
+                              Icons
+                                  .storefront,
+
+                              size:
+                                  50,
+
+                              color:
+                                  Colors.white,
+                            )
+                          : null,
+                ),
+
+                const SizedBox(
+                  height:
+                      16,
+                ),
+
+                Text(
+                  emprendimiento.nombre,
+
+                  textAlign:
+                      TextAlign.center,
+
+                  style:
+                      const TextStyle(
+                    fontSize:
+                        22,
+
+                    fontWeight:
+                        FontWeight.bold,
+                  ),
+                ),
+
+                if (emprendimiento
+                            .descripcion !=
+                        null &&
+                    emprendimiento
+                        .descripcion!
+                        .isNotEmpty) ...[
+                  const SizedBox(
+                    height:
+                        12,
+                  ),
+
+                  Text(
+                    emprendimiento
+                        .descripcion!,
+
+                    textAlign:
+                        TextAlign.center,
+                  ),
+                ],
+
+                if (emprendimiento
+                            .telefono !=
+                        null &&
+                    emprendimiento
+                        .telefono!
+                        .isNotEmpty) ...[
+                  const SizedBox(
+                    height:
+                        15,
+                  ),
+
+                  ListTile(
+                    leading:
+                        const Icon(
+                      Icons
+                          .phone_outlined,
+
+                      color:
+                          _naranjaPrincipal,
+                    ),
+
+                    title:
+                        const Text(
+                      'Teléfono',
+                    ),
+
+                    subtitle:
+                        Text(
+                      emprendimiento
+                          .telefono!,
+                    ),
+                  ),
+                ],
+
+                if (emprendimiento
+                            .correoContacto !=
+                        null &&
+                    emprendimiento
+                        .correoContacto!
+                        .isNotEmpty)
+                  ListTile(
+                    leading:
+                        const Icon(
+                      Icons
+                          .email_outlined,
+
+                      color:
+                          _naranjaPrincipal,
+                    ),
+
+                    title:
+                        const Text(
+                      'Correo de contacto',
+                    ),
+
+                    subtitle:
+                        Text(
+                      emprendimiento
+                          .correoContacto!,
+                    ),
+                  ),
+
+                const SizedBox(
+                  height:
+                      16,
+                ),
+
+                SizedBox(
+                  width:
+                      double.infinity,
+
+                  height:
+                      50,
+
+                  child:
+                      FilledButton.icon(
+                    style:
+                        FilledButton
+                            .styleFrom(
+                      backgroundColor:
+                          _verdeRuta,
+
+                      foregroundColor:
+                          Colors.white,
+                    ),
+
+                    onPressed:
+                        () {
+                      Navigator.pop(
+                        perfilContext,
+                      );
+
+                      _marcarRuta(
+                        emprendimiento,
+                      );
+                    },
+
+                    icon:
+                        const Icon(
+                      Icons.route,
+                    ),
+
+                    label:
+                        const Text(
+                      'Cómo llegar',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // GPS / PERMISOS
+  // ============================================================
+
+  Future<Position?>
+      _obtenerPosicionParaRuta() async {
+    final servicio =
+        await Geolocator
+            .isLocationServiceEnabled();
+
+    if (!servicio) {
+      if (mounted) {
+        _mostrarDialogoGpsDesactivado();
       }
 
-      // ========================================================
-      // OBTENER POSICIÓN
-      // ========================================================
+      return null;
+    }
 
-      const LocationSettings settings =
-          LocationSettings(
-        accuracy:
-            LocationAccuracy.high,
-      );
+    LocationPermission permiso =
+        await Geolocator
+            .checkPermission();
 
-      final Position posicion =
+    if (permiso ==
+        LocationPermission.denied) {
+      permiso =
           await Geolocator
-              .getCurrentPosition(
-        locationSettings: settings,
-      );
+              .requestPermission();
+    }
+
+    if (permiso ==
+        LocationPermission.denied) {
+      if (mounted) {
+        _mostrarMensaje(
+          'Permiso de ubicación denegado.',
+        );
+      }
+
+      return null;
+    }
+
+    if (permiso ==
+        LocationPermission
+            .deniedForever) {
+      if (mounted) {
+        _mostrarDialogoPermisoPermanente();
+      }
+
+      return null;
+    }
+
+    const settings =
+        LocationSettings(
+      accuracy:
+          LocationAccuracy.high,
+    );
+
+    return Geolocator
+        .getCurrentPosition(
+      locationSettings:
+          settings,
+    );
+  }
+
+  // ============================================================
+  // MI UBICACIÓN
+  // ============================================================
+
+  Future<void>
+      _obtenerMiUbicacion() async {
+    if (_obteniendoUbicacion) {
+      return;
+    }
+
+    setState(() {
+      _obteniendoUbicacion =
+          true;
+    });
+
+    try {
+      final posicion =
+          await _obtenerPosicionParaRuta();
+
+      if (posicion ==
+          null) {
+        return;
+      }
 
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _posicionUsuario = posicion;
+        _posicionUsuario =
+            posicion;
       });
 
       await _dibujarUbicacion(
         posicion,
         centrar: true,
       );
-    } catch (e) {
-      debugPrint(
-        'Error obteniendo ubicación: $e',
-      );
-
-      if (!mounted) {
-        return;
-      }
-
-      _mostrarMensaje(
-        'No se pudo obtener tu ubicación.',
-      );
     } finally {
       if (mounted) {
         setState(() {
-          _obteniendoUbicacion = false;
+          _obteniendoUbicacion =
+              false;
         });
       }
     }
   }
 
   // ============================================================
-  // DIBUJAR UBICACIÓN
+  // DIBUJAR MI UBICACIÓN
   // ============================================================
 
   Future<void> _dibujarUbicacion(
@@ -601,53 +1737,400 @@ class _MapaScreenState extends State<MapaScreen> {
     final controller =
         _mapController;
 
-    if (controller == null ||
+    if (controller ==
+            null ||
         !_estiloCargado) {
       return;
     }
 
-    final LatLng punto =
+    final punto =
         LatLng(
       posicion.latitude,
       posicion.longitude,
     );
 
     try {
-      if (_marcadorUsuario == null) {
+      if (_marcadorUsuario ==
+          null) {
         _marcadorUsuario =
-            await controller.addCircle(
+            await controller
+                .addCircle(
           CircleOptions(
-            geometry: punto,
-            circleRadius: 9.0,
-            circleColor: '#FF7E01',
+            geometry:
+                punto,
+
+            circleRadius:
+                9,
+
+            circleColor:
+                '#FF7E01',
+
             circleStrokeColor:
                 '#FFFFFF',
-            circleStrokeWidth: 3.0,
-            circleOpacity: 1.0,
+
+            circleStrokeWidth:
+                3,
+
+            circleOpacity:
+                1,
           ),
         );
       } else {
-        await controller.updateCircle(
+        await controller
+            .updateCircle(
           _marcadorUsuario!,
           CircleOptions(
-            geometry: punto,
+            geometry:
+                punto,
           ),
         );
       }
 
       if (centrar) {
-        await controller.animateCamera(
-          CameraUpdate.newLatLngZoom(
+        await controller
+            .animateCamera(
+          CameraUpdate
+              .newLatLngZoom(
             punto,
-            15.0,
+            15,
           ),
         );
       }
     } catch (e) {
       debugPrint(
-        'Error dibujando ubicación: $e',
+        'ERROR UBICACIÓN: $e',
       );
     }
+  }
+
+  // ============================================================
+  // MARCAR RUTA
+  // ============================================================
+
+  Future<void> _marcarRuta(
+    Emprendimiento emprendimiento,
+  ) async {
+    if (_calculandoRuta) {
+      return;
+    }
+
+    if (emprendimiento
+                .latitud ==
+            null ||
+        emprendimiento
+                .longitud ==
+            null) {
+      _mostrarMensaje(
+        'Este emprendimiento no tiene ubicación.',
+      );
+
+      return;
+    }
+
+    setState(() {
+      _calculandoRuta =
+          true;
+
+      _destinoActual =
+          emprendimiento;
+    });
+
+    try {
+      final posicion =
+          await _obtenerPosicionParaRuta();
+
+      if (posicion ==
+          null) {
+        return;
+      }
+
+      _posicionUsuario =
+          posicion;
+
+      await _dibujarUbicacion(
+        posicion,
+        centrar: false,
+      );
+
+      final origen =
+          LatLng(
+        posicion.latitude,
+        posicion.longitude,
+      );
+
+      final destino =
+          LatLng(
+        emprendimiento.latitud!,
+        emprendimiento.longitud!,
+      );
+
+      final resultado =
+          await RutaService
+              .obtenerRuta(
+        origen:
+            origen,
+
+        destino:
+            destino,
+      );
+
+      if (resultado['success'] !=
+          true) {
+        if (mounted) {
+          _mostrarMensaje(
+            resultado['message'] ??
+                'No se pudo calcular la ruta',
+          );
+        }
+
+        return;
+      }
+
+      final geojson =
+          Map<String, dynamic>.from(
+        resultado['geojson'],
+      );
+
+      await _dibujarRuta(
+        geojson,
+      );
+
+      _distanciaRuta =
+          (resultado['distancia']
+                  as num?)
+              ?.toDouble();
+
+      _duracionRuta =
+          (resultado['duracion']
+                  as num?)
+              ?.toDouble();
+
+      if (mounted) {
+        setState(() {});
+      }
+
+      await _encuadrarRuta(
+        origen,
+        destino,
+      );
+    } catch (e) {
+      debugPrint(
+        'ERROR RUTA: $e',
+      );
+
+      if (mounted) {
+        _mostrarMensaje(
+          'No se pudo calcular la ruta',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _calculandoRuta =
+              false;
+        });
+      }
+    }
+  }
+
+  // ============================================================
+  // DIBUJAR RUTA
+  // ============================================================
+
+  Future<void> _dibujarRuta(
+    Map<String, dynamic> geojson,
+  ) async {
+    final controller =
+        _mapController;
+
+    if (controller ==
+        null) {
+      return;
+    }
+
+    if (_rutaCreada) {
+      await controller
+          .setGeoJsonSource(
+        'merc-ruta',
+        geojson,
+      );
+
+      return;
+    }
+
+    await controller
+        .addGeoJsonSource(
+      'merc-ruta',
+      geojson,
+    );
+
+    // Fondo blanco para que
+    // destaque sobre el naranja.
+    await controller
+        .addLineLayer(
+      'merc-ruta',
+      'merc-ruta-borde',
+      const LineLayerProperties(
+        lineColor:
+            '#FFFFFF',
+
+        lineWidth:
+            9,
+
+        lineOpacity:
+            0.85,
+      ),
+    );
+
+    // Ruta verde Beta 4.4.
+    await controller
+        .addLineLayer(
+      'merc-ruta',
+      'merc-ruta-line',
+      const LineLayerProperties(
+        lineColor:
+            '#11C031',
+
+        lineWidth:
+            6,
+
+        lineOpacity:
+            1,
+      ),
+    );
+
+    _rutaCreada =
+        true;
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  // ============================================================
+  // ENCUADRAR RUTA
+  // ============================================================
+
+  Future<void> _encuadrarRuta(
+    LatLng origen,
+    LatLng destino,
+  ) async {
+    final controller =
+        _mapController;
+
+    if (controller ==
+        null) {
+      return;
+    }
+
+    final south =
+        min(
+      origen.latitude,
+      destino.latitude,
+    );
+
+    final north =
+        max(
+      origen.latitude,
+      destino.latitude,
+    );
+
+    final west =
+        min(
+      origen.longitude,
+      destino.longitude,
+    );
+
+    final east =
+        max(
+      origen.longitude,
+      destino.longitude,
+    );
+
+    await controller
+        .animateCamera(
+      CameraUpdate
+          .newLatLngBounds(
+        LatLngBounds(
+          southwest:
+              LatLng(
+            south,
+            west,
+          ),
+
+          northeast:
+              LatLng(
+            north,
+            east,
+          ),
+        ),
+
+        left:
+            55,
+
+        top:
+            100,
+
+        right:
+            55,
+
+        bottom:
+            150,
+      ),
+    );
+  }
+
+  // ============================================================
+  // CANCELAR RUTA
+  // ============================================================
+
+  Future<void>
+      _cancelarRuta() async {
+    final controller =
+        _mapController;
+
+    if (controller !=
+            null &&
+        _rutaCreada) {
+      try {
+        await controller
+            .removeLayer(
+          'merc-ruta-line',
+        );
+
+        await controller
+            .removeLayer(
+          'merc-ruta-borde',
+        );
+
+        await controller
+            .removeSource(
+          'merc-ruta',
+        );
+      } catch (e) {
+        debugPrint(
+          'ERROR ELIMINANDO RUTA: $e',
+        );
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _rutaCreada =
+          false;
+
+      _destinoActual =
+          null;
+
+      _distanciaRuta =
+          null;
+
+      _duracionRuta =
+          null;
+    });
   }
 
   // ============================================================
@@ -656,40 +2139,62 @@ class _MapaScreenState extends State<MapaScreen> {
 
   void _mostrarDialogoGpsDesactivado() {
     showDialog(
-      context: context,
-      builder: (dialogContext) {
+      context:
+          context,
+
+      builder:
+          (dialogContext) {
         return AlertDialog(
-          icon: const Icon(
-            Icons.location_off_outlined,
-            color: _naranjaPrincipal,
-            size: 38,
+          icon:
+              const Icon(
+            Icons
+                .location_off_outlined,
+
+            color:
+                _naranjaPrincipal,
+
+            size:
+                38,
           ),
-          title: const Text(
+
+          title:
+              const Text(
             'Ubicación desactivada',
           ),
-          content: const Text(
-            'Activa la ubicación del dispositivo para poder mostrar tu posición en el mapa.',
+
+          content:
+              const Text(
+            'Activa la ubicación del dispositivo para poder usar el GPS o calcular una ruta.',
           ),
+
           actions: [
             TextButton(
-              onPressed: () {
+              onPressed:
+                  () {
                 Navigator.pop(
                   dialogContext,
                 );
               },
-              child: const Text(
+
+              child:
+                  const Text(
                 'Cancelar',
               ),
             ),
+
             FilledButton(
               style:
-                  FilledButton.styleFrom(
+                  FilledButton
+                      .styleFrom(
                 backgroundColor:
                     _naranjaPrincipal,
+
                 foregroundColor:
                     Colors.white,
               ),
-              onPressed: () async {
+
+              onPressed:
+                  () async {
                 Navigator.pop(
                   dialogContext,
                 );
@@ -697,7 +2202,9 @@ class _MapaScreenState extends State<MapaScreen> {
                 await Geolocator
                     .openLocationSettings();
               },
-              child: const Text(
+
+              child:
+                  const Text(
                 'Abrir ajustes',
               ),
             ),
@@ -708,45 +2215,63 @@ class _MapaScreenState extends State<MapaScreen> {
   }
 
   // ============================================================
-  // PERMISO PERMANENTEMENTE DENEGADO
+  // PERMISO BLOQUEADO
   // ============================================================
 
   void _mostrarDialogoPermisoPermanente() {
     showDialog(
-      context: context,
-      builder: (dialogContext) {
+      context:
+          context,
+
+      builder:
+          (dialogContext) {
         return AlertDialog(
-          icon: const Icon(
-            Icons.gps_off_outlined,
-            color: _naranjaPrincipal,
-            size: 38,
+          icon:
+              const Icon(
+            Icons.gps_off,
+
+            color:
+                _naranjaPrincipal,
           ),
-          title: const Text(
+
+          title:
+              const Text(
             'Permiso requerido',
           ),
-          content: const Text(
-            'El permiso de ubicación está bloqueado. Puedes habilitarlo desde los ajustes de la aplicación.',
+
+          content:
+              const Text(
+            'El permiso de ubicación está bloqueado. Actívalo desde los ajustes de la aplicación.',
           ),
+
           actions: [
             TextButton(
-              onPressed: () {
+              onPressed:
+                  () {
                 Navigator.pop(
                   dialogContext,
                 );
               },
-              child: const Text(
+
+              child:
+                  const Text(
                 'Cancelar',
               ),
             ),
+
             FilledButton(
               style:
-                  FilledButton.styleFrom(
+                  FilledButton
+                      .styleFrom(
                 backgroundColor:
                     _naranjaPrincipal,
+
                 foregroundColor:
                     Colors.white,
               ),
-              onPressed: () async {
+
+              onPressed:
+                  () async {
                 Navigator.pop(
                   dialogContext,
                 );
@@ -754,7 +2279,9 @@ class _MapaScreenState extends State<MapaScreen> {
                 await Geolocator
                     .openAppSettings();
               },
-              child: const Text(
+
+              child:
+                  const Text(
                 'Abrir ajustes',
               ),
             ),
@@ -765,31 +2292,33 @@ class _MapaScreenState extends State<MapaScreen> {
   }
 
   // ============================================================
-  // MENSAJE
+  // MENSAJES
   // ============================================================
 
   void _mostrarMensaje(
     String mensaje,
   ) {
-    ScaffoldMessenger.of(context)
-        .hideCurrentSnackBar();
-
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
-      SnackBar(
-        content: Text(
-          mensaje,
+    ScaffoldMessenger.of(
+      context,
+    )
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content:
+              Text(
+            mensaje,
+          ),
         ),
-      ),
-    );
+      );
   }
 
   // ============================================================
-  // ZOOM +
+  // ZOOM
   // ============================================================
 
   Future<void> _acercar() async {
-    if (_mapController == null) {
+    if (_mapController ==
+        null) {
       return;
     }
 
@@ -809,12 +2338,9 @@ class _MapaScreenState extends State<MapaScreen> {
     );
   }
 
-  // ============================================================
-  // ZOOM -
-  // ============================================================
-
   Future<void> _alejar() async {
-    if (_mapController == null) {
+    if (_mapController ==
+        null) {
       return;
     }
 
@@ -835,40 +2361,54 @@ class _MapaScreenState extends State<MapaScreen> {
   }
 
   // ============================================================
-  // CENTRAR EL SALVADOR
+  // CENTRAR
   // ============================================================
 
-  Future<void> _centrarElSalvador() async {
-    if (_mapController == null) {
+  Future<void>
+      _centrarElSalvador() async {
+    if (_mapController ==
+        null) {
       return;
     }
 
     await _mapController!
         .animateCamera(
-      CameraUpdate.newLatLngBounds(
+      CameraUpdate
+          .newLatLngBounds(
         _limitesElSalvador,
-        left: 25,
-        top: 80,
-        right: 25,
-        bottom: 70,
+
+        left:
+            25,
+
+        top:
+            80,
+
+        right:
+            25,
+
+        bottom:
+            70,
       ),
     );
   }
 
   // ============================================================
-  // NIVEL ACTUAL
+  // NIVEL
   // ============================================================
 
   String _nivelActual() {
-    if (_zoomActual < 8.5) {
+    if (_zoomActual <
+        8.5) {
       return 'ADMIN0';
     }
 
-    if (_zoomActual < 10) {
+    if (_zoomActual <
+        10) {
       return 'ADMIN1';
     }
 
-    if (_zoomActual < 13) {
+    if (_zoomActual <
+        13) {
       return 'ADMIN2';
     }
 
@@ -886,27 +2426,38 @@ class _MapaScreenState extends State<MapaScreen> {
     required bool oscuro,
     bool cargando = false,
   }) {
-    return FloatingActionButton.small(
-      heroTag: tag,
-      elevation: 3,
+    return FloatingActionButton
+        .small(
+      heroTag:
+          tag,
+
       backgroundColor:
           oscuro
               ? _panelOscuro
               : Colors.white,
+
       foregroundColor:
           _naranjaPrincipal,
+
       onPressed:
           cargando
               ? null
               : onPressed,
+
       child:
           cargando
               ? const SizedBox(
-                  width: 19,
-                  height: 19,
+                  width:
+                      19,
+
+                  height:
+                      19,
+
                   child:
                       CircularProgressIndicator(
-                    strokeWidth: 2,
+                    strokeWidth:
+                        2,
+
                     color:
                         _naranjaPrincipal,
                   ),
@@ -918,6 +2469,48 @@ class _MapaScreenState extends State<MapaScreen> {
   }
 
   // ============================================================
+  // FORMATEAR RUTA
+  // ============================================================
+
+  String _formatearDistancia() {
+    if (_distanciaRuta ==
+        null) {
+      return '';
+    }
+
+    if (_distanciaRuta! <
+        1000) {
+      return '${_distanciaRuta!.round()} m';
+    }
+
+    return '${(_distanciaRuta! / 1000).toStringAsFixed(1)} km';
+  }
+
+  String _formatearDuracion() {
+    if (_duracionRuta ==
+        null) {
+      return '';
+    }
+
+    final minutos =
+        (_duracionRuta! / 60)
+            .round();
+
+    if (minutos <
+        60) {
+      return '$minutos min';
+    }
+
+    final horas =
+        minutos ~/ 60;
+
+    final resto =
+        minutos % 60;
+
+    return '${horas}h ${resto}min';
+  }
+
+  // ============================================================
   // BUILD
   // ============================================================
 
@@ -926,7 +2519,8 @@ class _MapaScreenState extends State<MapaScreen> {
     BuildContext context,
   ) {
     final oscuro =
-        Theme.of(context).brightness ==
+        Theme.of(context)
+                .brightness ==
             Brightness.dark;
 
     final fondo =
@@ -947,7 +2541,9 @@ class _MapaScreenState extends State<MapaScreen> {
               );
 
     return Scaffold(
-      backgroundColor: fondo,
+      backgroundColor:
+          fondo,
+
       body: Stack(
         children: [
           // ====================================================
@@ -955,7 +2551,8 @@ class _MapaScreenState extends State<MapaScreen> {
           // ====================================================
 
           MapLibreMap(
-            key: ValueKey(
+            key:
+                ValueKey(
               oscuro
                   ? 'map-dark'
                   : 'map-light',
@@ -970,7 +2567,9 @@ class _MapaScreenState extends State<MapaScreen> {
                 const CameraPosition(
               target:
                   _centroElSalvador,
-              zoom: 8.5,
+
+              zoom:
+                  8.5,
             ),
 
             cameraTargetBounds:
@@ -993,11 +2592,6 @@ class _MapaScreenState extends State<MapaScreen> {
             compassEnabled:
                 false,
 
-            // No usamos la ubicación
-            // automática de MapLibre.
-            //
-            // Nosotros la controlamos
-            // con Geolocator.
             myLocationEnabled:
                 false,
 
@@ -1025,7 +2619,7 @@ class _MapaScreenState extends State<MapaScreen> {
           ),
 
           // ====================================================
-          // CARGANDO MAPA
+          // CARGANDO
           // ====================================================
 
           if (!_estiloCargado ||
@@ -1033,10 +2627,13 @@ class _MapaScreenState extends State<MapaScreen> {
             Container(
               color:
                   fondo.withValues(
-                alpha: 0.80,
+                alpha:
+                    0.80,
               ),
+
               alignment:
                   Alignment.center,
+
               child:
                   const CircularProgressIndicator(
                 color:
@@ -1057,63 +2654,57 @@ class _MapaScreenState extends State<MapaScreen> {
                 80,
                 12,
               ),
+
               child: Container(
-                height: 52,
-                constraints:
-                    const BoxConstraints(
-                  maxWidth: 430,
-                ),
+                height:
+                    52,
+
                 padding:
                     const EdgeInsets.symmetric(
-                  horizontal: 15,
+                  horizontal:
+                      15,
                 ),
+
                 decoration:
                     BoxDecoration(
                   color:
                       panel.withValues(
-                    alpha: 0.95,
+                    alpha:
+                        0.95,
                   ),
+
                   borderRadius:
                       BorderRadius.circular(
                     18,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color:
-                          Colors.black
-                              .withValues(
-                        alpha:
-                            oscuro
-                                ? 0.35
-                                : 0.14,
-                      ),
-                      blurRadius: 10,
-                    ),
-                  ],
                 ),
+
                 child: Row(
                   children: [
                     const Icon(
-                      Icons.map_outlined,
+                      Icons
+                          .map_outlined,
+
                       color:
                           _naranjaPrincipal,
                     ),
 
                     const SizedBox(
-                      width: 9,
+                      width:
+                          8,
                     ),
 
                     Expanded(
                       child: Text(
                         'Mapa de El Salvador',
-                        overflow:
-                            TextOverflow.ellipsis,
+
                         style:
                             TextStyle(
-                          color: texto,
+                          color:
+                              texto,
+
                           fontWeight:
                               FontWeight.bold,
-                          fontSize: 16,
                         ),
                       ),
                     ),
@@ -1124,67 +2715,97 @@ class _MapaScreenState extends State<MapaScreen> {
           ),
 
           // ====================================================
-          // CONTROLES DERECHA
+          // CONTROLES
           // ====================================================
 
           Positioned(
-            right: 15,
+            right:
+                15,
+
             top:
-                MediaQuery.of(context)
-                        .padding
-                        .top +
+                MediaQuery.of(
+                      context,
+                    ).padding.top +
                     12,
+
             child: Column(
               children: [
                 _boton(
-                  tag: 'zoomMas',
-                  icon: Icons.add,
-                  onPressed: _acercar,
-                  oscuro: oscuro,
-                ),
+                  tag:
+                      'zoomMas',
 
-                const SizedBox(
-                  height: 10,
-                ),
-
-                _boton(
-                  tag: 'zoomMenos',
-                  icon: Icons.remove,
-                  onPressed: _alejar,
-                  oscuro: oscuro,
-                ),
-
-                const SizedBox(
-                  height: 10,
-                ),
-
-                _boton(
-                  tag: 'centrar',
                   icon:
-                      Icons.center_focus_strong,
+                      Icons.add,
+
+                  onPressed:
+                      _acercar,
+
+                  oscuro:
+                      oscuro,
+                ),
+
+                const SizedBox(
+                  height:
+                      10,
+                ),
+
+                _boton(
+                  tag:
+                      'zoomMenos',
+
+                  icon:
+                      Icons.remove,
+
+                  onPressed:
+                      _alejar,
+
+                  oscuro:
+                      oscuro,
+                ),
+
+                const SizedBox(
+                  height:
+                      10,
+                ),
+
+                _boton(
+                  tag:
+                      'centrar',
+
+                  icon:
+                      Icons
+                          .center_focus_strong,
+
                   onPressed:
                       _centrarElSalvador,
-                  oscuro: oscuro,
+
+                  oscuro:
+                      oscuro,
                 ),
 
                 const SizedBox(
-                  height: 10,
+                  height:
+                      10,
                 ),
 
-                // ===============================================
-                // MI UBICACIÓN
-                // ===============================================
-
                 _boton(
-                  tag: 'miUbicacion',
+                  tag:
+                      'gps',
+
                   icon:
-                      _posicionUsuario != null
-                          ? Icons.my_location
+                      _posicionUsuario ==
+                              null
+                          ? Icons
+                              .location_searching
                           : Icons
-                              .location_searching,
+                              .my_location,
+
                   onPressed:
                       _obtenerMiUbicacion,
-                  oscuro: oscuro,
+
+                  oscuro:
+                      oscuro,
+
                   cargando:
                       _obteniendoUbicacion,
                 ),
@@ -1193,64 +2814,264 @@ class _MapaScreenState extends State<MapaScreen> {
           ),
 
           // ====================================================
-          // INDICADOR UBICACIÓN ACTIVA
+          // CALCULANDO RUTA
           // ====================================================
 
-          if (_posicionUsuario != null)
+          if (_calculandoRuta)
+            const Center(
+              child: Card(
+                child: Padding(
+                  padding:
+                      EdgeInsets.all(
+                    18,
+                  ),
+
+                  child: Row(
+                    mainAxisSize:
+                        MainAxisSize.min,
+
+                    children: [
+                      CircularProgressIndicator(
+                        color:
+                            _verdeRuta,
+                      ),
+
+                      SizedBox(
+                        width:
+                            15,
+                      ),
+
+                      Text(
+                        'Calculando ruta...',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // ====================================================
+          // PANEL RUTA
+          // ====================================================
+
+          if (_rutaCreada &&
+              _destinoActual !=
+                  null)
             Positioned(
-              right: 15,
-              bottom: 25,
+              left:
+                  15,
+
+              right:
+                  15,
+
+              bottom:
+                  20,
+
               child: SafeArea(
-                top: false,
+                top:
+                    false,
+
                 child: Container(
                   padding:
-                      const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
+                      const EdgeInsets.all(
+                    15,
                   ),
+
                   decoration:
                       BoxDecoration(
                     color:
                         panel.withValues(
-                      alpha: 0.95,
+                      alpha:
+                          0.97,
                     ),
+
                     borderRadius:
                         BorderRadius.circular(
-                      20,
+                      18,
                     ),
+
                     boxShadow: [
                       BoxShadow(
                         color:
                             Colors.black
                                 .withValues(
                           alpha:
-                              oscuro
-                                  ? 0.35
-                                  : 0.14,
+                              0.15,
                         ),
-                        blurRadius: 8,
+
+                        blurRadius:
+                            12,
                       ),
                     ],
                   ),
-                  child: const Row(
+
+                  child: Row(
+                    children: [
+                      Container(
+                        width:
+                            45,
+
+                        height:
+                            45,
+
+                        decoration:
+                            const BoxDecoration(
+                          color:
+                              _verdeRuta,
+
+                          shape:
+                              BoxShape.circle,
+                        ),
+
+                        child:
+                            const Icon(
+                          Icons.route,
+
+                          color:
+                              Colors.white,
+                        ),
+                      ),
+
+                      const SizedBox(
+                        width:
+                            12,
+                      ),
+
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment
+                                  .start,
+
+                          children: [
+                            Text(
+                              _destinoActual!
+                                  .nombre,
+
+                              maxLines:
+                                  1,
+
+                              overflow:
+                                  TextOverflow
+                                      .ellipsis,
+
+                              style:
+                                  const TextStyle(
+                                fontWeight:
+                                    FontWeight.bold,
+                              ),
+                            ),
+
+                            const SizedBox(
+                              height:
+                                  3,
+                            ),
+
+                            Text(
+                              '${_formatearDistancia()} · '
+                              '${_formatearDuracion()}',
+
+                              style:
+                                  const TextStyle(
+                                color:
+                                    _verdeRuta,
+
+                                fontWeight:
+                                    FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      IconButton(
+                        tooltip:
+                            'Cancelar ruta',
+
+                        onPressed:
+                            _cancelarRuta,
+
+                        icon:
+                            const Icon(
+                          Icons.close,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else
+            Positioned(
+              left:
+                  15,
+
+              bottom:
+                  25,
+
+              child: SafeArea(
+                top:
+                    false,
+
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(
+                    horizontal:
+                        14,
+
+                    vertical:
+                        9,
+                  ),
+
+                  decoration:
+                      BoxDecoration(
+                    color:
+                        panel.withValues(
+                      alpha:
+                          0.95,
+                    ),
+
+                    borderRadius:
+                        BorderRadius.circular(
+                      20,
+                    ),
+                  ),
+
+                  child: Row(
                     mainAxisSize:
                         MainAxisSize.min,
+
                     children: [
-                      Icon(
-                        Icons.my_location,
-                        size: 16,
+                      const Icon(
+                        Icons
+                            .layers_outlined,
+
                         color:
                             _naranjaPrincipal,
+
+                        size:
+                            17,
                       ),
-                      SizedBox(
-                        width: 6,
+
+                      const SizedBox(
+                        width:
+                            6,
                       ),
+
                       Text(
-                        'Mi ubicación',
-                        style: TextStyle(
+                        '${_nivelActual()} · '
+                        'Zoom ${_zoomActual.toStringAsFixed(1)}',
+
+                        style:
+                            TextStyle(
+                          color:
+                              texto,
+
                           fontWeight:
                               FontWeight.bold,
-                          fontSize: 12,
+
+                          fontSize:
+                              12,
                         ),
                       ),
                     ],
@@ -1258,108 +3079,41 @@ class _MapaScreenState extends State<MapaScreen> {
                 ),
               ),
             ),
-
-          // ====================================================
-          // NIVEL
-          // ====================================================
-
-          Positioned(
-            left: 15,
-            bottom: 25,
-            child: SafeArea(
-              top: false,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 9,
-                ),
-                decoration:
-                    BoxDecoration(
-                  color:
-                      panel.withValues(
-                    alpha: 0.95,
-                  ),
-                  borderRadius:
-                      BorderRadius.circular(
-                    20,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color:
-                          Colors.black
-                              .withValues(
-                        alpha:
-                            oscuro
-                                ? 0.35
-                                : 0.14,
-                      ),
-                      blurRadius: 10,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize:
-                      MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.layers_outlined,
-                      color:
-                          _naranjaPrincipal,
-                      size: 18,
-                    ),
-
-                    const SizedBox(
-                      width: 6,
-                    ),
-
-                    Text(
-                      '${_nivelActual()} · Zoom ${_zoomActual.toStringAsFixed(1)}',
-                      style:
-                          TextStyle(
-                        color: texto,
-                        fontWeight:
-                            FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
 
           // ====================================================
           // ERROR
           // ====================================================
 
-          if (_error != null)
+          if (_error !=
+              null)
             Center(
               child: Container(
                 margin:
                     const EdgeInsets.all(
-                  25,
+                  30,
                 ),
+
                 padding:
                     const EdgeInsets.all(
                   20,
                 ),
+
                 decoration:
                     BoxDecoration(
-                  color: panel,
+                  color:
+                      panel,
+
                   borderRadius:
                       BorderRadius.circular(
                     18,
                   ),
                 ),
+
                 child: Text(
                   _error!,
+
                   textAlign:
                       TextAlign.center,
-                  style:
-                      TextStyle(
-                    color: texto,
-                  ),
                 ),
               ),
             ),
