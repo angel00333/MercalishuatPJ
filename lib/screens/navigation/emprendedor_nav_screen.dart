@@ -8,6 +8,7 @@ import '../home_emprendedor_screen.dart';
 import '../perfil_screen.dart';
 import '../producto_actions/productos_screen.dart';
 import '../tienda_actions/mi_tienda_screen.dart';
+import '../mapa_screen_emprendedor.dart';
 
 
 class EmprendedorNavScreen extends StatefulWidget {
@@ -36,7 +37,7 @@ class _EmprendedorNavScreenState
     paginas = [
       const ProductosScreen(),
       const ExplorarEmprendimientosScreen(),
-      const mapa.MapaScreen(),
+      const MapaScreenEmprendedor(),
       MiTiendaScreen(
         themeService: widget.themeService,
       ),

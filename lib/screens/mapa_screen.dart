@@ -177,6 +177,16 @@ class _MapaScreenState extends State<MapaScreen> {
   double? _duracionRuta;
 
   // ============================================================
+  // CONTROL DE TAPS EN MÓVIL
+  // ============================================================
+
+  bool _abriendoEmprendimiento = false;
+
+  int? _ultimoEmprendimientoTocado;
+
+  DateTime? _ultimoTapEmprendimiento;
+
+  // ============================================================
   // INIT
   // ============================================================
 
@@ -492,7 +502,7 @@ class _MapaScreenState extends State<MapaScreen> {
   }
 
   // ============================================================
-  // TAP EN EMPRENDIMIENTO
+  // TAP DIRECTO SOBRE EMPRENDIMIENTO
   // ============================================================
 
   void _onFeatureTapped(
@@ -503,82 +513,184 @@ class _MapaScreenState extends State<MapaScreen> {
     Annotation? annotation,
   ) {
     debugPrint(
-      '================================',
+      'FEATURE TAP -> id=$id layer=$layerId',
     );
 
-    debugPrint(
-      'FEATURE TOCADA',
-    );
-
-    debugPrint(
-      'ID: $id',
-    );
-
-    debugPrint(
-      'LAYER: $layerId',
-    );
-
-    debugPrint(
-      'COORDENADAS: '
-      '${coordinates.latitude}, '
-      '${coordinates.longitude}',
-    );
-
-    debugPrint(
-      '================================',
-    );
-
-    if (layerId !=
-        _layerEmprendimientos) {
+    if (layerId != _layerEmprendimientos) {
       return;
     }
 
     final int? emprendimientoId =
-        int.tryParse(
-      id,
-    );
+        int.tryParse(id);
 
-    if (emprendimientoId ==
-        null) {
+    if (emprendimientoId == null) {
       debugPrint(
-        'ID inválido: $id',
+        'ID inválido recibido desde onFeatureTapped: $id',
       );
-
       return;
     }
 
-    Emprendimiento?
-        seleccionado;
+    _abrirEmprendimientoPorId(
+      emprendimientoId,
+    );
+  }
 
-    for (final tienda
-        in _emprendimientos) {
-      if (tienda.id ==
-          emprendimientoId) {
-        seleccionado =
-            tienda;
+  // ============================================================
+  // TAP GENERAL DEL MAPA
+  //
+  // Respaldo para Android/iOS. Si el callback específico de
+  // la capa no dispara, consultamos manualmente qué feature
+  // quedó debajo del dedo.
+  // ============================================================
 
+  Future<void> _onMapClick(
+    Point<double> point,
+    LatLng coordinates,
+  ) async {
+    final controller = _mapController;
+
+    if (controller == null ||
+        !_capaEmprendimientosCargada) {
+      return;
+    }
+
+    try {
+      final List<dynamic> features =
+          await controller.queryRenderedFeatures(
+        point,
+        const [
+          _layerEmprendimientos,
+        ],
+        null,
+      );
+
+      if (features.isEmpty) {
+        return;
+      }
+
+      for (final dynamic rawFeature in features) {
+        if (rawFeature is! Map) {
+          continue;
+        }
+
+        final Map<String, dynamic> feature =
+            Map<String, dynamic>.from(
+          rawFeature,
+        );
+
+        int? emprendimientoId;
+
+        // En la mayoría de plataformas viene como Feature.id.
+        final dynamic rawId =
+            feature['id'];
+
+        if (rawId != null) {
+          emprendimientoId =
+              int.tryParse(
+            rawId.toString(),
+          );
+        }
+
+        // Respaldo por si la plataforma devuelve solo properties.
+        if (emprendimientoId == null) {
+          final dynamic rawProperties =
+              feature['properties'];
+
+          if (rawProperties is Map) {
+            final properties =
+                Map<String, dynamic>.from(
+              rawProperties,
+            );
+
+            final dynamic rawPropId =
+                properties['emprendimiento_id'];
+
+            if (rawPropId != null) {
+              emprendimientoId =
+                  int.tryParse(
+                rawPropId.toString(),
+              );
+            }
+          }
+        }
+
+        if (emprendimientoId != null) {
+          await _abrirEmprendimientoPorId(
+            emprendimientoId,
+          );
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint(
+        'ERROR TAP RESPALDO MAPA: $e',
+      );
+    }
+  }
+
+  // ============================================================
+  // ABRIR EMPRENDIMIENTO
+  //
+  // Evita que onFeatureTapped + onMapClick abran dos veces
+  // el mismo BottomSheet.
+  // ============================================================
+
+  Future<void> _abrirEmprendimientoPorId(
+    int id,
+  ) async {
+    if (!mounted) {
+      return;
+    }
+
+    final DateTime ahora =
+        DateTime.now();
+
+    if (_ultimoEmprendimientoTocado == id &&
+        _ultimoTapEmprendimiento != null &&
+        ahora
+                .difference(
+                  _ultimoTapEmprendimiento!,
+                )
+                .inMilliseconds <
+            650) {
+      return;
+    }
+
+    if (_abriendoEmprendimiento) {
+      return;
+    }
+
+    Emprendimiento? seleccionado;
+
+    for (final tienda in _emprendimientos) {
+      if (tienda.id == id) {
+        seleccionado = tienda;
         break;
       }
     }
 
-    if (seleccionado ==
-        null) {
+    if (seleccionado == null) {
       debugPrint(
-        'NO SE ENCONTRÓ EMPRENDIMIENTO '
-        '$emprendimientoId',
+        'NO SE ENCONTRÓ EMPRENDIMIENTO ID $id',
       );
-
       return;
     }
 
+    _ultimoEmprendimientoTocado = id;
+    _ultimoTapEmprendimiento = ahora;
+    _abriendoEmprendimiento = true;
+
     debugPrint(
-      'TIENDA SELECCIONADA: '
-      '${seleccionado.nombre}',
+      'TIENDA SELECCIONADA: ${seleccionado.nombre}',
     );
 
-    _mostrarOpcionesEmprendimiento(
-      seleccionado,
-    );
+    try {
+      await _mostrarOpcionesEmprendimiento(
+        seleccionado,
+      );
+    } finally {
+      _abriendoEmprendimiento = false;
+    }
   }
 
   // ============================================================
@@ -1106,14 +1218,14 @@ class _MapaScreenState extends State<MapaScreen> {
   // OPCIONES DEL EMPRENDIMIENTO
   // ============================================================
 
-  void _mostrarOpcionesEmprendimiento(
+  Future<void> _mostrarOpcionesEmprendimiento(
     Emprendimiento emprendimiento,
-  ) {
+  ) async {
     if (!mounted) {
       return;
     }
 
-    showModalBottomSheet(
+    await showModalBottomSheet(
       context:
           context,
 
@@ -2603,6 +2715,20 @@ class _MapaScreenState extends State<MapaScreen> {
 
             onStyleLoadedCallback:
                 _onStyleLoaded,
+
+            // ==================================================
+            // TAP ROBUSTO EN MÓVIL
+            //
+            // La capa interactiva dispara onFeatureTapped y,
+            // además, este callback consulta manualmente la capa
+            // cuando el toque específico falla en Android/iOS.
+            // ==================================================
+
+            onMapClick:
+                _onMapClick,
+
+            featureTapsTriggersMapClick:
+                true,
 
             onCameraMove:
                 (position) {

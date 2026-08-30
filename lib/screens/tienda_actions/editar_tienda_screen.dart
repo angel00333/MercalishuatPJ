@@ -25,8 +25,7 @@ class EditarTiendaScreen
 }
 
 class _EditarTiendaScreenState
-    extends State<
-        EditarTiendaScreen> {
+    extends State<EditarTiendaScreen> {
   late TextEditingController
       nombreController;
 
@@ -39,18 +38,26 @@ class _EditarTiendaScreenState
   late TextEditingController
       correoController;
 
-  final picker =
+  final ImagePicker picker =
       ImagePicker();
 
   String? imagenUrl;
 
-  bool guardando = false;
-  bool subiendoImagen = false;
+  double? latitud;
+  double? longitud;
+
+  bool guardando =
+      false;
+
+  bool subiendoImagen =
+      false;
+
   bool obteniendoUbicacion =
       false;
 
-  double? latitud;
-  double? longitud;
+  // ============================================================
+  // INIT
+  // ============================================================
 
   @override
   void initState() {
@@ -87,6 +94,10 @@ class _EditarTiendaScreenState
     imagenUrl =
         widget.tienda.imagenUrl;
 
+    // ==========================================================
+    // UBICACIÓN ACTUAL GUARDADA
+    // ==========================================================
+
     latitud =
         widget.tienda.latitud;
 
@@ -103,8 +114,10 @@ class _EditarTiendaScreenState
   ) async {
     final imagen =
         await picker.pickImage(
-      source: source,
-      imageQuality: 85,
+      source:
+          source,
+      imageQuality:
+          85,
     );
 
     if (imagen == null) {
@@ -112,7 +125,8 @@ class _EditarTiendaScreenState
     }
 
     setState(() {
-      subiendoImagen = true;
+      subiendoImagen =
+          true;
     });
 
     final resultado =
@@ -126,14 +140,16 @@ class _EditarTiendaScreenState
     }
 
     setState(() {
-      subiendoImagen = false;
+      subiendoImagen =
+          false;
     });
 
     if (resultado['success'] ==
         true) {
       setState(() {
         imagenUrl =
-            resultado['imagen_url'];
+            resultado[
+                'imagen_url'];
       });
 
       mostrarMensaje(
@@ -151,8 +167,10 @@ class _EditarTiendaScreenState
 
   void opcionesImagen() {
     showModalBottomSheet(
-      context: context,
-      builder: (_) {
+      context:
+          context,
+      builder:
+          (modalContext) {
         return SafeArea(
           child: Wrap(
             children: [
@@ -166,17 +184,18 @@ class _EditarTiendaScreenState
                     const Text(
                   'Galería',
                 ),
-                onTap: () {
+                onTap:
+                    () {
                   Navigator.pop(
-                    context,
+                    modalContext,
                   );
 
                   elegirImagen(
-                    ImageSource.gallery,
+                    ImageSource
+                        .gallery,
                   );
                 },
               ),
-
               ListTile(
                 leading:
                     const Icon(
@@ -187,9 +206,10 @@ class _EditarTiendaScreenState
                     const Text(
                   'Cámara',
                 ),
-                onTap: () {
+                onTap:
+                    () {
                   Navigator.pop(
-                    context,
+                    modalContext,
                   );
 
                   elegirImagen(
@@ -205,7 +225,7 @@ class _EditarTiendaScreenState
   }
 
   // ============================================================
-  // USAR UBICACIÓN ACTUAL
+  // USAR MI UBICACIÓN ACTUAL
   // ============================================================
 
   Future<void>
@@ -220,16 +240,21 @@ class _EditarTiendaScreenState
     });
 
     try {
-      final servicioActivo =
+      final bool servicio =
           await Geolocator
               .isLocationServiceEnabled();
 
-      if (!servicioActivo) {
+      if (!servicio) {
         if (!mounted) {
           return;
         }
 
-        await _mostrarGpsDesactivado();
+        mostrarMensaje(
+          'Activa la ubicación del dispositivo',
+        );
+
+        await Geolocator
+            .openLocationSettings();
 
         return;
       }
@@ -247,13 +272,11 @@ class _EditarTiendaScreenState
 
       if (permiso ==
           LocationPermission.denied) {
-        if (!mounted) {
-          return;
+        if (mounted) {
+          mostrarMensaje(
+            'Permiso de ubicación denegado',
+          );
         }
-
-        mostrarMensaje(
-          'Permiso de ubicación denegado',
-        );
 
         return;
       }
@@ -261,11 +284,14 @@ class _EditarTiendaScreenState
       if (permiso ==
           LocationPermission
               .deniedForever) {
-        if (!mounted) {
-          return;
+        if (mounted) {
+          mostrarMensaje(
+            'Activa el permiso de ubicación desde los ajustes',
+          );
         }
 
-        await _mostrarPermisoBloqueado();
+        await Geolocator
+            .openAppSettings();
 
         return;
       }
@@ -276,7 +302,7 @@ class _EditarTiendaScreenState
             LocationAccuracy.high,
       );
 
-      final posicion =
+      final Position posicion =
           await Geolocator
               .getCurrentPosition(
         locationSettings:
@@ -296,20 +322,18 @@ class _EditarTiendaScreenState
       });
 
       mostrarMensaje(
-        'Ubicación actualizada',
+        'Ubicación actual seleccionada',
       );
     } catch (e) {
       debugPrint(
-        'Error obteniendo ubicación: $e',
+        'Error ubicación: $e',
       );
 
-      if (!mounted) {
-        return;
+      if (mounted) {
+        mostrarMensaje(
+          'No se pudo obtener la ubicación',
+        );
       }
-
-      mostrarMensaje(
-        'No se pudo obtener tu ubicación',
-      );
     } finally {
       if (mounted) {
         setState(() {
@@ -321,30 +345,31 @@ class _EditarTiendaScreenState
   }
 
   // ============================================================
-  // UBICAR EN MAPA
+  // UBICAR EN EL MAPA
   // ============================================================
 
   Future<void> ubicarEnMapa() async {
-    LatLng? ubicacionInicial;
+    LatLng? inicial;
 
     if (latitud != null &&
         longitud != null) {
-      ubicacionInicial =
+      inicial =
           LatLng(
         latitud!,
         longitud!,
       );
     }
 
-    final resultado =
-        await Navigator
-            .push<LatLng>(
+    final LatLng? resultado =
+        await Navigator.push<
+            LatLng>(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            SeleccionarUbicacionScreen(
+        builder:
+            (_) =>
+                SeleccionarUbicacionScreen(
           ubicacionInicial:
-              ubicacionInicial,
+              inicial,
         ),
       ),
     );
@@ -363,7 +388,7 @@ class _EditarTiendaScreenState
     });
 
     mostrarMensaje(
-      'Ubicación seleccionada',
+      'Nueva ubicación seleccionada',
     );
   }
 
@@ -373,9 +398,16 @@ class _EditarTiendaScreenState
 
   void eliminarUbicacion() {
     setState(() {
-      latitud = null;
-      longitud = null;
+      latitud =
+          null;
+
+      longitud =
+          null;
     });
+
+    mostrarMensaje(
+      'Ubicación eliminada. Selecciona una nueva antes de guardar.',
+    );
   }
 
   // ============================================================
@@ -384,7 +416,8 @@ class _EditarTiendaScreenState
 
   Future<void> guardar() async {
     final nombre =
-        nombreController.text.trim();
+        nombreController.text
+            .trim();
 
     if (nombre.isEmpty) {
       mostrarMensaje(
@@ -404,24 +437,35 @@ class _EditarTiendaScreenState
     }
 
     setState(() {
-      guardando = true;
+      guardando =
+          true;
     });
+
+    // ==========================================================
+    // AQUÍ ESTABA EL ERROR
+    //
+    // AHORA SÍ ENVIAMOS LATITUD Y LONGITUD.
+    // ==========================================================
 
     final resultado =
         await EmprendimientoService
             .editar(
-      nombre: nombre,
+      nombre:
+          nombre,
 
       descripcion:
-          descripcionController.text
+          descripcionController
+              .text
               .trim(),
 
       telefono:
-          telefonoController.text
+          telefonoController
+              .text
               .trim(),
 
       correoContacto:
-          correoController.text
+          correoController
+              .text
               .trim(),
 
       latitud:
@@ -436,7 +480,8 @@ class _EditarTiendaScreenState
     }
 
     setState(() {
-      guardando = false;
+      guardando =
+          false;
     });
 
     if (resultado['success'] ==
@@ -460,172 +505,24 @@ class _EditarTiendaScreenState
   }
 
   // ============================================================
-  // GPS DESACTIVADO
-  // ============================================================
-
-  Future<void>
-      _mostrarGpsDesactivado() async {
-    await showDialog(
-      context: context,
-      builder: (
-        dialogContext,
-      ) {
-        return AlertDialog(
-          icon: const Icon(
-            Icons
-                .location_off_outlined,
-            color:
-                Color(0xFFFF7E01),
-            size: 42,
-          ),
-
-          title:
-              const Text(
-            'Ubicación desactivada',
-          ),
-
-          content:
-              const Text(
-            'Activa la ubicación del dispositivo para utilizar tu posición actual.',
-          ),
-
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                );
-              },
-              child:
-                  const Text(
-                'Cancelar',
-              ),
-            ),
-
-            FilledButton(
-              style:
-                  FilledButton
-                      .styleFrom(
-                backgroundColor:
-                    const Color(
-                  0xFFFF7E01,
-                ),
-                foregroundColor:
-                    Colors.white,
-              ),
-              onPressed:
-                  () async {
-                Navigator.pop(
-                  dialogContext,
-                );
-
-                await Geolocator
-                    .openLocationSettings();
-              },
-              child:
-                  const Text(
-                'Abrir ajustes',
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // ============================================================
-  // PERMISO BLOQUEADO
-  // ============================================================
-
-  Future<void>
-      _mostrarPermisoBloqueado() async {
-    await showDialog(
-      context: context,
-      builder: (
-        dialogContext,
-      ) {
-        return AlertDialog(
-          icon: const Icon(
-            Icons
-                .gps_off_outlined,
-            color:
-                Color(0xFFFF7E01),
-            size: 42,
-          ),
-
-          title:
-              const Text(
-            'Permiso requerido',
-          ),
-
-          content:
-              const Text(
-            'El permiso de ubicación está bloqueado. Puedes habilitarlo desde los ajustes de la aplicación.',
-          ),
-
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                );
-              },
-              child:
-                  const Text(
-                'Cancelar',
-              ),
-            ),
-
-            FilledButton(
-              style:
-                  FilledButton
-                      .styleFrom(
-                backgroundColor:
-                    const Color(
-                  0xFFFF7E01,
-                ),
-                foregroundColor:
-                    Colors.white,
-              ),
-              onPressed:
-                  () async {
-                Navigator.pop(
-                  dialogContext,
-                );
-
-                await Geolocator
-                    .openAppSettings();
-              },
-              child:
-                  const Text(
-                'Abrir ajustes',
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // ============================================================
   // MENSAJE
   // ============================================================
 
   void mostrarMensaje(
     String mensaje,
   ) {
-    ScaffoldMessenger.of(context)
-        .hideCurrentSnackBar();
-
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
-      SnackBar(
-        content:
-            Text(
-          mensaje,
+    ScaffoldMessenger.of(
+      context,
+    )
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content:
+              Text(
+            mensaje,
+          ),
         ),
-      ),
-    );
+      );
   }
 
   // ============================================================
@@ -635,8 +532,11 @@ class _EditarTiendaScreenState
   @override
   void dispose() {
     nombreController.dispose();
+
     descripcionController.dispose();
+
     telefonoController.dispose();
+
     correoController.dispose();
 
     super.dispose();
@@ -650,23 +550,26 @@ class _EditarTiendaScreenState
   Widget build(
     BuildContext context,
   ) {
-    final oscuro =
-        Theme.of(context).brightness ==
+    final bool oscuro =
+        Theme.of(context)
+                .brightness ==
             Brightness.dark;
 
-    final ubicacionSeleccionada =
+    final bool tieneUbicacion =
         latitud != null &&
             longitud != null;
 
     return Scaffold(
-      appBar: AppBar(
+      appBar:
+          AppBar(
         title:
             const Text(
           'Editar tienda',
         ),
       ),
 
-      body: ListView(
+      body:
+          ListView(
         padding:
             const EdgeInsets.all(
           24,
@@ -721,24 +624,20 @@ class _EditarTiendaScreenState
                       0,
                   bottom:
                       0,
-
                   child:
                       Material(
                     color:
                         const Color(
                       0xFFFF7E01,
                     ),
-
                     shape:
                         const CircleBorder(),
-
                     child:
                         IconButton(
                       onPressed:
                           subiendoImagen
                               ? null
                               : opcionesImagen,
-
                       icon:
                           subiendoImagen
                               ? const SizedBox(
@@ -772,19 +671,13 @@ class _EditarTiendaScreenState
                 30,
           ),
 
-          // ====================================================
-          // NOMBRE
-          // ====================================================
-
           TextField(
             controller:
                 nombreController,
-
             decoration:
                 const InputDecoration(
               labelText:
                   'Nombre del emprendimiento',
-
               prefixIcon:
                   Icon(
                 Icons.storefront,
@@ -797,22 +690,15 @@ class _EditarTiendaScreenState
                 18,
           ),
 
-          // ====================================================
-          // DESCRIPCIÓN
-          // ====================================================
-
           TextField(
             controller:
                 descripcionController,
-
             maxLines:
                 4,
-
             decoration:
                 const InputDecoration(
               labelText:
                   'Descripción',
-
               prefixIcon:
                   Icon(
                 Icons
@@ -826,22 +712,15 @@ class _EditarTiendaScreenState
                 18,
           ),
 
-          // ====================================================
-          // TELÉFONO
-          // ====================================================
-
           TextField(
             controller:
                 telefonoController,
-
             keyboardType:
                 TextInputType.phone,
-
             decoration:
                 const InputDecoration(
               labelText:
                   'Teléfono',
-
               prefixIcon:
                   Icon(
                 Icons.phone_outlined,
@@ -854,23 +733,16 @@ class _EditarTiendaScreenState
                 18,
           ),
 
-          // ====================================================
-          // CORREO
-          // ====================================================
-
           TextField(
             controller:
                 correoController,
-
             keyboardType:
                 TextInputType
                     .emailAddress,
-
             decoration:
                 const InputDecoration(
               labelText:
                   'Correo de contacto',
-
               prefixIcon:
                   Icon(
                 Icons.email_outlined,
@@ -887,9 +759,9 @@ class _EditarTiendaScreenState
           // UBICACIÓN
           // ====================================================
 
-          Row(
+          const Row(
             children: [
-              const Icon(
+              Icon(
                 Icons
                     .location_on_outlined,
                 color:
@@ -897,25 +769,18 @@ class _EditarTiendaScreenState
                   0xFFFF7E01,
                 ),
               ),
-
-              const SizedBox(
+              SizedBox(
                 width:
                     8,
               ),
-
-              Expanded(
-                child:
-                    Text(
-                  'Ubicación del emprendimiento',
-
-                  style:
-                      Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(
-                    fontWeight:
-                        FontWeight.bold,
-                  ),
+              Text(
+                'Ubicación del emprendimiento',
+                style:
+                    TextStyle(
+                  fontSize:
+                      17,
+                  fontWeight:
+                      FontWeight.bold,
                 ),
               ),
             ],
@@ -923,127 +788,73 @@ class _EditarTiendaScreenState
 
           const SizedBox(
             height:
-                8,
+                16,
           ),
 
-          Text(
-            'Puedes mantener la ubicación actual o cambiarla.',
-
-            style:
-                Theme.of(context)
-                    .textTheme
-                    .bodySmall,
-          ),
-
-          const SizedBox(
-            height:
-                18,
-          ),
-
-          // ====================================================
-          // UBICACIÓN ACTUAL
-          // ====================================================
-
-          SizedBox(
-            height:
-                52,
-
-            child:
-                OutlinedButton.icon(
-              onPressed:
-                  obteniendoUbicacion
-                      ? null
-                      : usarMiUbicacionActual,
-
-              icon:
-                  obteniendoUbicacion
-                      ? const SizedBox(
-                          width:
-                              19,
-                          height:
-                              19,
-                          child:
-                              CircularProgressIndicator(
-                            strokeWidth:
-                                2,
-                            color:
-                                Color(
-                              0xFFFF7E01,
-                            ),
-                          ),
-                        )
-                      : const Icon(
-                          Icons
-                              .my_location,
-                        ),
-
-              label:
-                  Text(
+          OutlinedButton.icon(
+            onPressed:
                 obteniendoUbicacion
-                    ? 'Obteniendo ubicación...'
-                    : 'Usar mi ubicación actual',
-              ),
+                    ? null
+                    : usarMiUbicacionActual,
+            icon:
+                obteniendoUbicacion
+                    ? const SizedBox(
+                        width:
+                            18,
+                        height:
+                            18,
+                        child:
+                            CircularProgressIndicator(
+                          strokeWidth:
+                              2,
+                        ),
+                      )
+                    : const Icon(
+                        Icons
+                            .my_location,
+                      ),
+            label:
+                Text(
+              obteniendoUbicacion
+                  ? 'Obteniendo ubicación...'
+                  : 'Usar mi ubicación actual',
             ),
           ),
 
           const SizedBox(
             height:
-                12,
+                10,
           ),
 
-          // ====================================================
-          // MAPA
-          // ====================================================
-
-          SizedBox(
-            height:
-                52,
-
-            child:
-                OutlinedButton.icon(
-              onPressed:
-                  ubicarEnMapa,
-
-              icon:
-                  const Icon(
-                Icons
-                    .map_outlined,
-              ),
-
-              label:
-                  Text(
-                ubicacionSeleccionada
-                    ? 'Cambiar ubicación en el mapa'
-                    : 'Ubicar en el mapa',
-              ),
+          OutlinedButton.icon(
+            onPressed:
+                ubicarEnMapa,
+            icon:
+                const Icon(
+              Icons.map_outlined,
+            ),
+            label:
+                Text(
+              tieneUbicacion
+                  ? 'Cambiar ubicación en el mapa'
+                  : 'Ubicar en el mapa',
             ),
           ),
 
           const SizedBox(
             height:
-                18,
+                16,
           ),
 
-          // ====================================================
-          // UBICACIÓN SELECCIONADA
-          // ====================================================
-
-          AnimatedContainer(
-            duration:
-                const Duration(
-              milliseconds:
-                  250,
-            ),
-
+          Container(
             padding:
                 const EdgeInsets.all(
-              16,
+              15,
             ),
-
             decoration:
                 BoxDecoration(
               color:
-                  ubicacionSeleccionada
+                  tieneUbicacion
                       ? const Color(
                               0xFFFF7E01,
                             )
@@ -1051,28 +862,21 @@ class _EditarTiendaScreenState
                           alpha:
                               oscuro
                                   ? 0.16
-                                  : 0.10,
+                                  : 0.08,
                         )
                       : Theme.of(
                           context,
                         )
                           .colorScheme
-                          .surfaceContainerHighest
-                          .withValues(
-                            alpha:
-                                0.45,
-                          ),
-
+                          .surfaceContainerHighest,
               borderRadius:
-                  BorderRadius
-                      .circular(
-                16,
+                  BorderRadius.circular(
+                14,
               ),
-
               border:
                   Border.all(
                 color:
-                    ubicacionSeleccionada
+                    tieneUbicacion
                         ? const Color(
                             0xFFFF7E01,
                           )
@@ -1081,51 +885,27 @@ class _EditarTiendaScreenState
                           ).dividerColor,
               ),
             ),
-
             child:
-                ubicacionSeleccionada
+                tieneUbicacion
                     ? Row(
                         children: [
-                          Container(
-                            width:
-                                42,
-                            height:
-                                42,
-
-                            decoration:
-                                BoxDecoration(
-                              color:
-                                  const Color(
-                                0xFFFF7E01,
-                              ),
-                              borderRadius:
-                                  BorderRadius
-                                      .circular(
-                                12,
-                              ),
-                            ),
-
-                            child:
-                                const Icon(
-                              Icons
-                                  .location_on,
-                              color:
-                                  Colors.white,
+                          const Icon(
+                            Icons
+                                .location_on,
+                            color:
+                                Color(
+                              0xFFFF7E01,
                             ),
                           ),
-
                           const SizedBox(
                             width:
-                                12,
+                                10,
                           ),
-
                           Expanded(
                             child:
                                 Column(
                               crossAxisAlignment:
-                                  CrossAxisAlignment
-                                      .start,
-
+                                  CrossAxisAlignment.start,
                               children: [
                                 const Text(
                                   'Ubicación seleccionada',
@@ -1135,16 +915,13 @@ class _EditarTiendaScreenState
                                         FontWeight.bold,
                                   ),
                                 ),
-
                                 const SizedBox(
                                   height:
-                                      4,
+                                      3,
                                 ),
-
                                 Text(
                                   '${latitud!.toStringAsFixed(6)}, '
                                   '${longitud!.toStringAsFixed(6)}',
-
                                   style:
                                       const TextStyle(
                                     fontSize:
@@ -1154,14 +931,9 @@ class _EditarTiendaScreenState
                               ],
                             ),
                           ),
-
                           IconButton(
-                            tooltip:
-                                'Eliminar ubicación',
-
                             onPressed:
                                 eliminarUbicacion,
-
                             icon:
                                 const Icon(
                               Icons.close,
@@ -1175,16 +947,14 @@ class _EditarTiendaScreenState
                             Icons
                                 .location_off_outlined,
                           ),
-
                           SizedBox(
                             width:
-                                12,
+                                10,
                           ),
-
                           Expanded(
                             child:
                                 Text(
-                              'Este emprendimiento todavía no tiene ubicación.',
+                              'No hay ubicación seleccionada.',
                             ),
                           ),
                         ],
@@ -1196,34 +966,27 @@ class _EditarTiendaScreenState
                 30,
           ),
 
-          // ====================================================
-          // GUARDAR
-          // ====================================================
-
           SizedBox(
             height:
                 50,
-
             child:
                 ElevatedButton.icon(
               onPressed:
                   guardando
                       ? null
                       : guardar,
-
               icon:
                   const Icon(
                 Icons
                     .save_outlined,
               ),
-
               label:
                   guardando
                       ? const SizedBox(
                           width:
-                              24,
+                              22,
                           height:
-                              24,
+                              22,
                           child:
                               CircularProgressIndicator(
                             strokeWidth:

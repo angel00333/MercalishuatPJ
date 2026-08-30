@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-class SeleccionarUbicacionScreen
-    extends StatefulWidget {
+class SeleccionarUbicacionScreen extends StatefulWidget {
   final LatLng? ubicacionInicial;
 
   const SeleccionarUbicacionScreen({
@@ -11,35 +11,20 @@ class SeleccionarUbicacionScreen
   });
 
   @override
-  State<SeleccionarUbicacionScreen>
-      createState() =>
-          _SeleccionarUbicacionScreenState();
+  State<SeleccionarUbicacionScreen> createState() =>
+      _SeleccionarUbicacionScreenState();
 }
 
 class _SeleccionarUbicacionScreenState
-    extends State<
-        SeleccionarUbicacionScreen> {
-  // ============================================================
-  // CONTROLADOR
-  // ============================================================
+    extends State<SeleccionarUbicacionScreen> {
+  MapLibreMapController? _mapController;
 
-  MapLibreMapController?
-      _mapController;
-
-  // ============================================================
-  // EL SALVADOR
-  // ============================================================
-
-  static const LatLng
-      _centroElSalvador =
-      LatLng(
+  static const LatLng _centroElSalvador = LatLng(
     13.7942,
     -88.8965,
   );
 
-  static final LatLngBounds
-      _limitesElSalvador =
-      LatLngBounds(
+  static final LatLngBounds _limitesElSalvador = LatLngBounds(
     southwest: const LatLng(
       13.00,
       -90.25,
@@ -50,101 +35,121 @@ class _SeleccionarUbicacionScreenState
     ),
   );
 
-  static const double
-      _zoomMinimo = 7.4;
+  static const double _zoomMinimo = 7.4;
+  static const double _zoomMaximo = 19.0;
 
-  static const double
-      _zoomMaximo = 19.0;
-
-  // ============================================================
-  // ESTILOS
-  // ============================================================
-
-  static const String
-      _estiloClaro =
+  static const String _estiloClaro =
       'assets/mapas/openfreemap_mercali_light.json';
 
-  static const String
-      _estiloOscuro =
+  static const String _estiloOscuro =
       'assets/mapas/openfreemap_mercali_dark.json';
 
-  // ============================================================
-  // COLORES
-  // ============================================================
+  static const Color _naranjaPrincipal = Color(0xFFFF7E01);
+  static const Color _panelOscuro = Color(0xFF2A2045);
+  static const Color _fondoOscuro = Color(0xFF171320);
+  static const Color _fondoClaro = Color(0xFFFFF6ED);
 
-  static const Color
-      _naranjaPrincipal =
-      Color(
-    0xFFFF7E01,
-  );
+  LatLng _centroActual = _centroElSalvador;
 
-  static const Color
-      _panelOscuro =
-      Color(
-    0xFF2A2045,
-  );
+  double _zoomActual = 8.5;
 
-  static const Color
-      _fondoOscuro =
-      Color(
-    0xFF171320,
-  );
-
-  static const Color
-      _fondoClaro =
-      Color(
-    0xFFFFF6ED,
-  );
-
-  // ============================================================
-  // POSICIÓN
-  // ============================================================
-
-  late LatLng
-      _centroActual;
-
-  double _zoomActual =
-      15.0;
-
-  bool _mapaListo =
-      false;
-
-  bool _moviendoMapa =
-      false;
-
-  // ============================================================
-  // INIT
-  // ============================================================
+  bool _preparandoUbicacion = true;
+  bool _mapaListo = false;
+  bool _moviendoMapa = false;
+  bool _confirmando = false;
 
   @override
   void initState() {
     super.initState();
 
-    _centroActual =
-        widget.ubicacionInicial ??
-            _centroElSalvador;
+    _prepararUbicacionInicial();
+  }
 
-    if (widget.ubicacionInicial ==
-        null) {
-      _zoomActual =
-          8.5;
+  Future<void> _prepararUbicacionInicial() async {
+    if (widget.ubicacionInicial != null) {
+      _centroActual = widget.ubicacionInicial!;
+      _zoomActual = 16;
+
+      if (mounted) {
+        setState(() {
+          _preparandoUbicacion = false;
+        });
+      }
+
+      return;
+    }
+
+    try {
+      final bool servicio =
+          await Geolocator.isLocationServiceEnabled();
+
+      if (!servicio) {
+        _usarCentroElSalvador();
+        return;
+      }
+
+      LocationPermission permiso =
+          await Geolocator.checkPermission();
+
+      if (permiso == LocationPermission.denied) {
+        permiso = await Geolocator.requestPermission();
+      }
+
+      if (permiso == LocationPermission.denied ||
+          permiso == LocationPermission.deniedForever) {
+        _usarCentroElSalvador();
+        return;
+      }
+
+      const settings = LocationSettings(
+        accuracy: LocationAccuracy.high,
+      );
+
+      final Position posicion =
+          await Geolocator.getCurrentPosition(
+        locationSettings: settings,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _centroActual = LatLng(
+          posicion.latitude,
+          posicion.longitude,
+        );
+
+        _zoomActual = 16;
+
+        _preparandoUbicacion = false;
+      });
+    } catch (e) {
+      debugPrint(
+        'ERROR UBICACIÓN INICIAL: $e',
+      );
+
+      _usarCentroElSalvador();
     }
   }
 
-  // ============================================================
-  // MAPA CREADO
-  // ============================================================
+  void _usarCentroElSalvador() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _centroActual = _centroElSalvador;
+      _zoomActual = 8.5;
+      _preparandoUbicacion = false;
+    });
+  }
 
   void _onMapCreated(
     MapLibreMapController controller,
   ) {
-    _mapController =
-        controller;
+    _mapController = controller;
   }
-
-  // ============================================================
-  // ESTILO CARGADO
-  // ============================================================
 
   void _onStyleLoaded() {
     if (!mounted) {
@@ -152,183 +157,347 @@ class _SeleccionarUbicacionScreenState
     }
 
     setState(() {
-      _mapaListo =
-          true;
+      _mapaListo = true;
     });
   }
-
-  // ============================================================
-  // MOVER CÁMARA
-  // ============================================================
 
   void _onCameraMove(
     CameraPosition position,
   ) {
-    _centroActual =
-        position.target;
+    _centroActual = position.target;
+    _zoomActual = position.zoom;
 
-    _zoomActual =
-        position.zoom;
-
-    if (!_moviendoMapa &&
-        mounted) {
+    if (!_moviendoMapa && mounted) {
       setState(() {
-        _moviendoMapa =
-            true;
+        _moviendoMapa = true;
       });
     }
   }
 
-  // ============================================================
-  // CÁMARA DETENIDA
-  // ============================================================
+  Future<void> _onCameraIdle() async {
+    final controller = _mapController;
 
-  void _onCameraIdle() {
+    if (controller != null) {
+      try {
+        final CameraPosition? posicion =
+            await controller.queryCameraPosition();
+
+        if (posicion != null) {
+          _centroActual = posicion.target;
+          _zoomActual = posicion.zoom;
+
+          debugPrint(
+            'CENTRO REAL: '
+            '${_centroActual.latitude}, '
+            '${_centroActual.longitude}',
+          );
+        }
+      } catch (e) {
+        debugPrint(
+          'ERROR LEYENDO CÁMARA: $e',
+        );
+      }
+    }
+
     if (!mounted) {
       return;
     }
 
     setState(() {
-      _moviendoMapa =
-          false;
+      _moviendoMapa = false;
     });
   }
 
-  // ============================================================
-  // CONFIRMAR
-  // ============================================================
+  Future<void> _confirmarUbicacion() async {
+    if (_confirmando) {
+      return;
+    }
 
-  void _confirmarUbicacion() {
-    Navigator.pop(
-      context,
-      _centroActual,
-    );
+    final controller = _mapController;
+
+    if (controller == null) {
+      _mostrarMensaje(
+        'El mapa aún no está listo',
+      );
+
+      return;
+    }
+
+    setState(() {
+      _confirmando = true;
+    });
+
+    try {
+      final CameraPosition? posicion =
+          await controller.queryCameraPosition();
+
+      final LatLng ubicacionReal =
+          posicion?.target ?? _centroActual;
+
+      debugPrint(
+        '================================',
+      );
+
+      debugPrint(
+        'UBICACIÓN CONFIRMADA',
+      );
+
+      debugPrint(
+        'LATITUD: ${ubicacionReal.latitude}',
+      );
+
+      debugPrint(
+        'LONGITUD: ${ubicacionReal.longitude}',
+      );
+
+      debugPrint(
+        '================================',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.pop(
+        context,
+        ubicacionReal,
+      );
+    } catch (e) {
+      debugPrint(
+        'ERROR CONFIRMANDO UBICACIÓN: $e',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.pop(
+        context,
+        _centroActual,
+      );
+    }
   }
 
-  // ============================================================
-  // CENTRAR EN UBICACIÓN INICIAL
-  // ============================================================
-
-  Future<void>
-      _volverUbicacionInicial() async {
-    final controller =
-        _mapController;
+  Future<void> _irAMiUbicacion() async {
+    final controller = _mapController;
 
     if (controller == null) {
       return;
     }
 
-    final LatLng destino =
-        widget.ubicacionInicial ??
-            _centroElSalvador;
+    try {
+      final bool servicio =
+          await Geolocator.isLocationServiceEnabled();
 
-    await controller.animateCamera(
-      CameraUpdate
-          .newLatLngZoom(
-        destino,
-        widget.ubicacionInicial !=
-                null
-            ? 15.0
-            : 8.5,
-      ),
-    );
+      if (!servicio) {
+        _mostrarMensaje(
+          'Activa la ubicación del dispositivo',
+        );
+
+        return;
+      }
+
+      LocationPermission permiso =
+          await Geolocator.checkPermission();
+
+      if (permiso == LocationPermission.denied) {
+        permiso = await Geolocator.requestPermission();
+      }
+
+      if (permiso == LocationPermission.denied ||
+          permiso == LocationPermission.deniedForever) {
+        _mostrarMensaje(
+          'No hay permiso de ubicación',
+        );
+
+        return;
+      }
+
+      const settings = LocationSettings(
+        accuracy: LocationAccuracy.high,
+      );
+
+      final Position posicion =
+          await Geolocator.getCurrentPosition(
+        locationSettings: settings,
+      );
+
+      final LatLng punto = LatLng(
+        posicion.latitude,
+        posicion.longitude,
+      );
+
+      await controller.animateCamera(
+        CameraUpdate.newLatLngZoom(
+          punto,
+          16,
+        ),
+      );
+
+      _centroActual = punto;
+      _zoomActual = 16;
+
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (e) {
+      debugPrint(
+        'ERROR GPS: $e',
+      );
+
+      _mostrarMensaje(
+        'No se pudo obtener tu ubicación',
+      );
+    }
   }
 
-  // ============================================================
-  // ZOOM +
-  // ============================================================
+  Future<void> _volverUbicacionInicial() async {
+    final controller = _mapController;
+
+    if (controller == null) {
+      return;
+    }
+
+    if (widget.ubicacionInicial != null) {
+      final LatLng punto =
+          widget.ubicacionInicial!;
+
+      await controller.animateCamera(
+        CameraUpdate.newLatLngZoom(
+          punto,
+          16,
+        ),
+      );
+
+      _centroActual = punto;
+      _zoomActual = 16;
+
+      if (mounted) {
+        setState(() {});
+      }
+
+      return;
+    }
+
+    await _irAMiUbicacion();
+  }
 
   Future<void> _acercar() async {
-    final controller =
-        _mapController;
+    final controller = _mapController;
 
     if (controller == null) {
       return;
     }
 
-    final zoom =
-        (_zoomActual + 1)
-            .clamp(
-              _zoomMinimo,
-              _zoomMaximo,
-            )
-            .toDouble();
+    try {
+      final CameraPosition? posicion =
+          await controller.queryCameraPosition();
 
-    await controller.animateCamera(
-      CameraUpdate.zoomTo(
-        zoom,
-      ),
-    );
+      final double zoomActual =
+          posicion?.zoom ?? _zoomActual;
+
+      final double zoom =
+          (zoomActual + 1)
+              .clamp(
+                _zoomMinimo,
+                _zoomMaximo,
+              )
+              .toDouble();
+
+      await controller.animateCamera(
+        CameraUpdate.zoomTo(
+          zoom,
+        ),
+      );
+    } catch (e) {
+      debugPrint(
+        'ERROR ZOOM +: $e',
+      );
+    }
   }
-
-  // ============================================================
-  // ZOOM -
-  // ============================================================
 
   Future<void> _alejar() async {
-    final controller =
-        _mapController;
+    final controller = _mapController;
 
     if (controller == null) {
       return;
     }
 
-    final zoom =
-        (_zoomActual - 1)
-            .clamp(
-              _zoomMinimo,
-              _zoomMaximo,
-            )
-            .toDouble();
+    try {
+      final CameraPosition? posicion =
+          await controller.queryCameraPosition();
 
-    await controller.animateCamera(
-      CameraUpdate.zoomTo(
-        zoom,
-      ),
-    );
+      final double zoomActual =
+          posicion?.zoom ?? _zoomActual;
+
+      final double zoom =
+          (zoomActual - 1)
+              .clamp(
+                _zoomMinimo,
+                _zoomMaximo,
+              )
+              .toDouble();
+
+      await controller.animateCamera(
+        CameraUpdate.zoomTo(
+          zoom,
+        ),
+      );
+    } catch (e) {
+      debugPrint(
+        'ERROR ZOOM -: $e',
+      );
+    }
   }
 
-  // ============================================================
-  // BOTÓN
-  // ============================================================
+  void _mostrarMensaje(
+    String mensaje,
+  ) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(
+      context,
+    )
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            mensaje,
+          ),
+        ),
+      );
+  }
 
   Widget _botonMapa({
     required String tag,
-    required IconData icono,
+    required IconData icon,
     required VoidCallback onPressed,
     required bool oscuro,
   }) {
     return FloatingActionButton.small(
-      heroTag:
-          tag,
-      elevation:
-          3,
+      heroTag: tag,
+      elevation: 3,
       backgroundColor:
           oscuro
               ? _panelOscuro
               : Colors.white,
       foregroundColor:
           _naranjaPrincipal,
-      onPressed:
-          onPressed,
-      child:
-          Icon(
-        icono,
+      onPressed: onPressed,
+      child: Icon(
+        icon,
       ),
     );
   }
-
-  // ============================================================
-  // BUILD
-  // ============================================================
 
   @override
   Widget build(
     BuildContext context,
   ) {
     final bool oscuro =
-        Theme.of(context)
-                .brightness ==
+        Theme.of(context).brightness ==
             Brightness.dark;
 
     final Color fondo =
@@ -348,33 +517,32 @@ class _SeleccionarUbicacionScreenState
                 0xFF512A12,
               );
 
-    return Scaffold(
-      backgroundColor:
-          fondo,
+    if (_preparandoUbicacion) {
+      return Scaffold(
+        backgroundColor: fondo,
+        appBar: AppBar(
+          title: const Text(
+            'Ubicar emprendimiento',
+          ),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(
+            color: _naranjaPrincipal,
+          ),
+        ),
+      );
+    }
 
-      appBar:
-          AppBar(
-        title:
-            const Text(
+    return Scaffold(
+      backgroundColor: fondo,
+      appBar: AppBar(
+        title: const Text(
           'Ubicar emprendimiento',
         ),
       ),
-
-      body:
-          Stack(
+      body: Stack(
         children: [
-          // ====================================================
-          // MAPA
-          // ====================================================
-
           MapLibreMap(
-            key:
-                ValueKey(
-              oscuro
-                  ? 'seleccionar-dark'
-                  : 'seleccionar-light',
-            ),
-
             styleString:
                 oscuro
                     ? _estiloOscuro
@@ -427,16 +595,12 @@ class _SeleccionarUbicacionScreenState
                 _onCameraIdle,
           ),
 
-          // ====================================================
-          // CARGANDO
-          // ====================================================
-
           if (!_mapaListo)
             Container(
               color:
                   fondo.withValues(
                 alpha:
-                    0.80,
+                    0.75,
               ),
               alignment:
                   Alignment.center,
@@ -447,18 +611,11 @@ class _SeleccionarUbicacionScreenState
               ),
             ),
 
-          // ====================================================
-          // INSTRUCCIONES
-          // ====================================================
-
           SafeArea(
-            child:
-                Align(
+            child: Align(
               alignment:
                   Alignment.topCenter,
-
-              child:
-                  Container(
+              child: Container(
                 margin:
                     const EdgeInsets.fromLTRB(
                   16,
@@ -466,15 +623,13 @@ class _SeleccionarUbicacionScreenState
                   80,
                   0,
                 ),
-
                 padding:
                     const EdgeInsets.symmetric(
                   horizontal:
                       14,
                   vertical:
-                      10,
+                      11,
                 ),
-
                 decoration:
                     BoxDecoration(
                   color:
@@ -482,14 +637,11 @@ class _SeleccionarUbicacionScreenState
                     alpha:
                         0.95,
                   ),
-
                   borderRadius:
                       BorderRadius.circular(
                     16,
                   ),
-
-                  boxShadow:
-                      [
+                  boxShadow: [
                     BoxShadow(
                       color:
                           Colors.black
@@ -502,9 +654,7 @@ class _SeleccionarUbicacionScreenState
                     ),
                   ],
                 ),
-
-                child:
-                    Row(
+                child: Row(
                   children: [
                     const Icon(
                       Icons
@@ -512,15 +662,12 @@ class _SeleccionarUbicacionScreenState
                       color:
                           _naranjaPrincipal,
                     ),
-
                     const SizedBox(
                       width:
                           10,
                     ),
-
                     Expanded(
-                      child:
-                          Text(
+                      child: Text(
                         'Mueve el mapa y coloca el pin sobre la ubicación exacta del emprendimiento.',
                         style:
                             TextStyle(
@@ -537,54 +684,39 @@ class _SeleccionarUbicacionScreenState
             ),
           ),
 
-          // ====================================================
-          // PIN FIJO CENTRAL
-          // ====================================================
-
           IgnorePointer(
-            child:
-                Center(
-              child:
-                  Transform.translate(
+            child: Center(
+              child: Transform.translate(
                 offset:
                     const Offset(
                   0,
-                  -24,
+                  -28,
                 ),
-
-                child:
-                    Column(
+                child: Column(
                   mainAxisSize:
                       MainAxisSize.min,
-
                   children: [
                     AnimatedScale(
                       duration:
                           const Duration(
                         milliseconds:
-                            160,
+                            120,
                       ),
-
                       scale:
                           _moviendoMapa
-                              ? 1.15
-                              : 1.0,
-
-                      child:
-                          Container(
+                              ? 1.10
+                              : 1,
+                      child: Container(
                         width:
-                            54,
+                            56,
                         height:
-                            54,
-
+                            56,
                         decoration:
                             BoxDecoration(
                           color:
                               _naranjaPrincipal,
-
                           shape:
                               BoxShape.circle,
-
                           border:
                               Border.all(
                             color:
@@ -592,9 +724,7 @@ class _SeleccionarUbicacionScreenState
                             width:
                                 4,
                           ),
-
-                          boxShadow:
-                              [
+                          boxShadow: [
                             BoxShadow(
                               color:
                                   Colors.black
@@ -603,7 +733,7 @@ class _SeleccionarUbicacionScreenState
                                     0.28,
                               ),
                               blurRadius:
-                                  9,
+                                  10,
                               offset:
                                   const Offset(
                                 0,
@@ -612,14 +742,14 @@ class _SeleccionarUbicacionScreenState
                             ),
                           ],
                         ),
-
                         child:
                             const Icon(
-                          Icons.storefront,
+                          Icons
+                              .storefront_outlined,
                           color:
                               Colors.white,
                           size:
-                              27,
+                              28,
                         ),
                       ),
                     ),
@@ -628,29 +758,27 @@ class _SeleccionarUbicacionScreenState
                       width:
                           4,
                       height:
-                          26,
-
+                          27,
                       color:
                           _naranjaPrincipal,
                     ),
 
                     Container(
                       width:
-                          12,
+                          14,
                       height:
                           6,
-
                       decoration:
                           BoxDecoration(
                         color:
                             Colors.black
                                 .withValues(
                           alpha:
-                              0.22,
+                              0.23,
                         ),
                         borderRadius:
                             BorderRadius.circular(
-                          50,
+                          20,
                         ),
                       ),
                     ),
@@ -660,26 +788,18 @@ class _SeleccionarUbicacionScreenState
             ),
           ),
 
-          // ====================================================
-          // CONTROLES
-          // ====================================================
-
           Positioned(
             right:
                 15,
-
             top:
                 14,
-
-            child:
-                SafeArea(
-              child:
-                  Column(
+            child: SafeArea(
+              child: Column(
                 children: [
                   _botonMapa(
                     tag:
-                        'selectorZoomMas',
-                    icono:
+                        'selectorMas',
+                    icon:
                         Icons.add,
                     onPressed:
                         _acercar,
@@ -694,8 +814,8 @@ class _SeleccionarUbicacionScreenState
 
                   _botonMapa(
                     tag:
-                        'selectorZoomMenos',
-                    icono:
+                        'selectorMenos',
+                    icon:
                         Icons.remove,
                     onPressed:
                         _alejar,
@@ -710,23 +830,38 @@ class _SeleccionarUbicacionScreenState
 
                   _botonMapa(
                     tag:
-                        'selectorCentrar',
-                    icono:
-                        Icons
-                            .center_focus_strong,
+                        'selectorGPS',
+                    icon:
+                        Icons.my_location,
                     onPressed:
-                        _volverUbicacionInicial,
+                        _irAMiUbicacion,
                     oscuro:
                         oscuro,
                   ),
+
+                  if (widget
+                          .ubicacionInicial !=
+                      null) ...[
+                    const SizedBox(
+                      height:
+                          10,
+                    ),
+
+                    _botonMapa(
+                      tag:
+                          'selectorOriginal',
+                      icon:
+                          Icons.history,
+                      onPressed:
+                          _volverUbicacionInicial,
+                      oscuro:
+                          oscuro,
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
-
-          // ====================================================
-          // PANEL INFERIOR
-          // ====================================================
 
           Positioned(
             left:
@@ -735,19 +870,14 @@ class _SeleccionarUbicacionScreenState
                 15,
             bottom:
                 15,
-
-            child:
-                SafeArea(
+            child: SafeArea(
               top:
                   false,
-
-              child:
-                  Container(
+              child: Container(
                 padding:
                     const EdgeInsets.all(
                   16,
                 ),
-
                 decoration:
                     BoxDecoration(
                   color:
@@ -755,43 +885,34 @@ class _SeleccionarUbicacionScreenState
                     alpha:
                         0.97,
                   ),
-
                   borderRadius:
                       BorderRadius.circular(
                     20,
                   ),
-
-                  boxShadow:
-                      [
+                  boxShadow: [
                     BoxShadow(
                       color:
                           Colors.black
                               .withValues(
                         alpha:
-                            oscuro
-                                ? 0.35
-                                : 0.18,
+                            0.18,
                       ),
                       blurRadius:
                           16,
                     ),
                   ],
                 ),
-
-                child:
-                    Column(
+                child: Column(
                   mainAxisSize:
                       MainAxisSize.min,
-
                   crossAxisAlignment:
-                      CrossAxisAlignment.stretch,
-
+                      CrossAxisAlignment
+                          .stretch,
                   children: [
                     Row(
                       children: [
                         const Icon(
-                          Icons
-                              .location_on,
+                          Icons.location_on,
                           color:
                               _naranjaPrincipal,
                         ),
@@ -802,11 +923,10 @@ class _SeleccionarUbicacionScreenState
                         ),
 
                         Expanded(
-                          child:
-                              Column(
+                          child: Column(
                             crossAxisAlignment:
-                                CrossAxisAlignment.start,
-
+                                CrossAxisAlignment
+                                    .start,
                             children: [
                               Text(
                                 'Ubicación seleccionada',
@@ -827,7 +947,6 @@ class _SeleccionarUbicacionScreenState
                               Text(
                                 '${_centroActual.latitude.toStringAsFixed(6)}, '
                                 '${_centroActual.longitude.toStringAsFixed(6)}',
-
                                 style:
                                     TextStyle(
                                   color:
@@ -853,7 +972,6 @@ class _SeleccionarUbicacionScreenState
                     SizedBox(
                       height:
                           50,
-
                       child:
                           FilledButton.icon(
                         style:
@@ -862,7 +980,6 @@ class _SeleccionarUbicacionScreenState
                               _naranjaPrincipal,
                           foregroundColor:
                               Colors.white,
-
                           shape:
                               RoundedRectangleBorder(
                             borderRadius:
@@ -873,21 +990,38 @@ class _SeleccionarUbicacionScreenState
                         ),
 
                         onPressed:
-                            _mapaListo
-                                ? _confirmarUbicacion
-                                : null,
+                            !_mapaListo ||
+                                    _confirmando
+                                ? null
+                                : _confirmarUbicacion,
 
                         icon:
-                            const Icon(
-                          Icons
-                              .check_circle_outline,
-                        ),
+                            _confirmando
+                                ? const SizedBox(
+                                    width:
+                                        19,
+                                    height:
+                                        19,
+                                    child:
+                                        CircularProgressIndicator(
+                                      strokeWidth:
+                                          2,
+                                      color:
+                                          Colors.white,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons
+                                        .check_circle_outline,
+                                  ),
 
                         label:
-                            const Text(
-                          'Confirmar ubicación',
+                            Text(
+                          _confirmando
+                              ? 'Confirmando...'
+                              : 'Confirmar ubicación',
                           style:
-                              TextStyle(
+                              const TextStyle(
                             fontWeight:
                                 FontWeight.bold,
                           ),
