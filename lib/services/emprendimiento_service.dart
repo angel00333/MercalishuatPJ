@@ -28,8 +28,7 @@ class EmprendimientoService {
   // MI TIENDA
   // =========================================
 
-  static Future<
-      Map<String, dynamic>>
+  static Future<Map<String, dynamic>>
       obtenerMiTienda() async {
     try {
       final headers =
@@ -79,13 +78,20 @@ class EmprendimientoService {
   // CREAR
   // =========================================
 
-  static Future<
-      Map<String, dynamic>>
+  static Future<Map<String, dynamic>>
       crear({
     required String nombre,
     String? descripcion,
     String? telefono,
     String? correoContacto,
+
+    // =======================================
+    // BETA 4.3
+    // UBICACIÓN COMERCIAL
+    // =======================================
+
+    double? latitud,
+    double? longitud,
   }) async {
     try {
       final headers =
@@ -98,11 +104,23 @@ class EmprendimientoService {
         ),
         headers: headers,
         body: jsonEncode({
-          'nombre': nombre,
-          'descripcion': descripcion,
-          'telefono': telefono,
+          'nombre':
+              nombre,
+          'descripcion':
+              descripcion,
+          'telefono':
+              telefono,
           'correo_contacto':
               correoContacto,
+
+          // =================================
+          // COORDENADAS
+          // =================================
+
+          'latitud':
+              latitud,
+          'longitud':
+              longitud,
         }),
       );
 
@@ -125,6 +143,8 @@ class EmprendimientoService {
 
       return {
         'success': false,
+        'statusCode':
+            response.statusCode,
         'message':
             data['message'] ??
                 'No se pudo crear el emprendimiento',
@@ -142,13 +162,20 @@ class EmprendimientoService {
   // EDITAR
   // =========================================
 
-  static Future<
-      Map<String, dynamic>>
+  static Future<Map<String, dynamic>>
       editar({
     required String nombre,
     String? descripcion,
     String? telefono,
     String? correoContacto,
+
+    // =======================================
+    // BETA 4.3
+    // UBICACIÓN COMERCIAL
+    // =======================================
+
+    double? latitud,
+    double? longitud,
   }) async {
     try {
       final headers =
@@ -161,11 +188,23 @@ class EmprendimientoService {
         ),
         headers: headers,
         body: jsonEncode({
-          'nombre': nombre,
-          'descripcion': descripcion,
-          'telefono': telefono,
+          'nombre':
+              nombre,
+          'descripcion':
+              descripcion,
+          'telefono':
+              telefono,
           'correo_contacto':
               correoContacto,
+
+          // =================================
+          // COORDENADAS
+          // =================================
+
+          'latitud':
+              latitud,
+          'longitud':
+              longitud,
         }),
       );
 
@@ -188,6 +227,8 @@ class EmprendimientoService {
 
       return {
         'success': false,
+        'statusCode':
+            response.statusCode,
         'message':
             data['message'] ??
                 'No se pudo actualizar la tienda',
@@ -205,8 +246,7 @@ class EmprendimientoService {
   // LISTAR TODAS
   // =========================================
 
-  static Future<
-      Map<String, dynamic>>
+  static Future<Map<String, dynamic>>
       listar() async {
     try {
       final response =
@@ -236,12 +276,15 @@ class EmprendimientoService {
 
         return {
           'success': true,
-          'emprendimientos': lista,
+          'emprendimientos':
+              lista,
         };
       }
 
       return {
         'success': false,
+        'statusCode':
+            response.statusCode,
         'message':
             data['message'] ??
                 'No se pudieron cargar los emprendimientos',
@@ -259,8 +302,7 @@ class EmprendimientoService {
   // DETALLE
   // =========================================
 
-  static Future<
-      Map<String, dynamic>>
+  static Future<Map<String, dynamic>>
       obtenerPorId(
     int id,
   ) async {
@@ -292,6 +334,8 @@ class EmprendimientoService {
 
       return {
         'success': false,
+        'statusCode':
+            response.statusCode,
         'message':
             data['message'] ??
                 'Emprendimiento no encontrado',

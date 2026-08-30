@@ -7,6 +7,8 @@ class Emprendimiento {
   final String? telefono;
   final String? correoContacto;
   final String? imagenUrl;
+  final double? latitud;
+  final double? longitud;
 
   final bool activo;
 
@@ -24,6 +26,8 @@ class Emprendimiento {
     this.activo = true,
     this.propietario,
     this.fechaCreacion,
+    this.latitud,
+    this.longitud,
   });
 
   factory Emprendimiento.fromJson(
@@ -63,6 +67,17 @@ class Emprendimiento {
                       .toString(),
                 )
               : null,
+      latitud: json['latitud'] == null
+    ? null
+    : double.tryParse(
+        json['latitud'].toString(),
+      ),
+
+      longitud: json['longitud'] == null
+    ? null
+    : double.tryParse(
+        json['longitud'].toString(),
+      ),
     );
   }
 

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 class MapaScreen extends StatefulWidget {
@@ -14,24 +15,26 @@ class MapaScreen extends StatefulWidget {
       _MapaScreenState();
 }
 
-class _MapaScreenState
-    extends State<MapaScreen> {
-  MapLibreMapController?
-      _mapController;
+class _MapaScreenState extends State<MapaScreen> {
+  // ============================================================
+  // CONTROLADOR
+  // ============================================================
+
+  MapLibreMapController? _mapController;
+
+  Circle? _marcadorUsuario;
 
   // ============================================================
   // EL SALVADOR
   // ============================================================
 
-  static const LatLng
-      _centroElSalvador =
+  static const LatLng _centroElSalvador =
       LatLng(
     13.7942,
     -88.8965,
   );
 
-  static final LatLngBounds
-      _limitesElSalvador =
+  static final LatLngBounds _limitesElSalvador =
       LatLngBounds(
     southwest: const LatLng(
       13.00,
@@ -43,11 +46,8 @@ class _MapaScreenState
     ),
   );
 
-  static const double
-      _zoomMinimo = 7.4;
-
-  static const double
-      _zoomMaximo = 19.0;
+  static const double _zoomMinimo = 7.4;
+  static const double _zoomMaximo = 19.0;
 
   double _zoomActual = 8.5;
 
@@ -55,70 +55,60 @@ class _MapaScreenState
   // ESTILOS
   // ============================================================
 
-  static const String
-      _estiloClaro =
+  static const String _estiloClaro =
       'assets/mapas/openfreemap_mercali_light.json';
 
-  static const String
-      _estiloOscuro =
+  static const String _estiloOscuro =
       'assets/mapas/openfreemap_mercali_dark.json';
 
   // ============================================================
-  // COLORES UI
+  // COLORES
   // ============================================================
 
-  static const Color
-      _naranjaPrincipal =
-      Color(
-    0xFFFF7E01,
-  );
+  static const Color _naranjaPrincipal =
+      Color(0xFFFF7E01);
 
-  static const Color
-      _panelOscuro =
-      Color(
-    0xFF2A2045,
-  );
+  static const Color _panelOscuro =
+      Color(0xFF2A2045);
 
-  static const Color
-      _fondoOscuro =
-      Color(
-    0xFF171320,
-  );
+  static const Color _fondoOscuro =
+      Color(0xFF171320);
 
-  static const Color
-      _fondoClaro =
-      Color(
-    0xFFFFF6ED,
-  );
+  static const Color _fondoClaro =
+      Color(0xFFFFF6ED);
 
   // ============================================================
   // GEOJSON
   // ============================================================
 
   Map<String, dynamic>? _admin0;
-
   Map<String, dynamic>? _admin1;
-
   Map<String, dynamic>? _admin2;
-
   Map<String, dynamic>? _admin3;
 
   Map<String, dynamic>? _mascara;
 
   // ============================================================
-  // ESTADO
+  // ESTADO MAPA
   // ============================================================
 
-  bool _geoJsonCargado =
-      false;
-
-  bool _estiloCargado =
-      false;
-
-  bool _capasCargadas =
-      false;
+  bool _geoJsonCargado = false;
+  bool _estiloCargado = false;
+  bool _capasCargadas = false;
 
   String? _error;
+
+  // ============================================================
+  // GPS
+  // ============================================================
+
+  Position? _posicionUsuario;
+
+  bool _obteniendoUbicacion = false;
+
+  // ============================================================
+  // INIT
+  // ============================================================
 
   @override
   void initState() {
@@ -133,8 +123,7 @@ class _MapaScreenState
 
   Future<void> _cargarGeoJson() async {
     try {
-      final textos =
-          await Future.wait(
+      final textos = await Future.wait(
         [
           rootBundle.loadString(
             'assets/mapas/SV-Map-ADM0.geojson',
@@ -181,11 +170,8 @@ class _MapaScreenState
       }
 
       setState(() {
-        _geoJsonCargado =
-            true;
-
-        _error =
-            null;
+        _geoJsonCargado = true;
+        _error = null;
       });
 
       if (_estiloCargado) {
@@ -205,29 +191,22 @@ class _MapaScreenState
 
   // ============================================================
   // MÁSCARA
-  //
-  // Oculta todo lo que está
-  // fuera de El Salvador.
   // ============================================================
 
-  Map<String, dynamic>
-      _crearMascara(
+  Map<String, dynamic> _crearMascara(
     Map<String, dynamic> admin0,
   ) {
-    final List<dynamic>
-        huecos = [];
+    final List<dynamic> huecos = [];
 
     final features =
         admin0['features'];
 
     if (features is List) {
-      for (final feature
-          in features) {
+      for (final feature in features) {
         final geometry =
             feature['geometry'];
 
-        if (geometry ==
-            null) {
+        if (geometry == null) {
           continue;
         }
 
@@ -237,42 +216,30 @@ class _MapaScreenState
                 '';
 
         final coordinates =
-            geometry[
-                'coordinates'];
+            geometry['coordinates'];
 
-        if (tipo ==
-                'Polygon' &&
-            coordinates
-                is List &&
-            coordinates
-                .isNotEmpty) {
+        if (tipo == 'Polygon' &&
+            coordinates is List &&
+            coordinates.isNotEmpty) {
           final exterior =
               coordinates[0];
 
-          if (exterior
-              is List) {
+          if (exterior is List) {
             huecos.add(
-              exterior.reversed
-                  .toList(),
+              exterior.reversed.toList(),
             );
           }
         }
 
-        if (tipo ==
-                'MultiPolygon' &&
-            coordinates
-                is List) {
+        if (tipo == 'MultiPolygon' &&
+            coordinates is List) {
           for (final polygon
               in coordinates) {
-            if (polygon
-                    is List &&
-                polygon
-                    .isNotEmpty &&
-                polygon[0]
-                    is List) {
+            if (polygon is List &&
+                polygon.isNotEmpty &&
+                polygon[0] is List) {
               huecos.add(
-                (polygon[0]
-                        as List)
+                (polygon[0] as List)
                     .reversed
                     .toList(),
               );
@@ -291,17 +258,14 @@ class _MapaScreenState
     ];
 
     return {
-      'type':
-          'FeatureCollection',
+      'type': 'FeatureCollection',
       'features': [
         {
-          'type':
-              'Feature',
+          'type': 'Feature',
           'properties':
               <String, dynamic>{},
           'geometry': {
-            'type':
-                'Polygon',
+            'type': 'Polygon',
             'coordinates': [
               exterior,
               ...huecos,
@@ -313,32 +277,29 @@ class _MapaScreenState
   }
 
   // ============================================================
-  // MAPA
+  // MAPA CREADO
   // ============================================================
 
   void _onMapCreated(
     MapLibreMapController controller,
   ) {
-    _mapController =
-        controller;
+    _mapController = controller;
   }
 
   // ============================================================
   // ESTILO CARGADO
   // ============================================================
 
-  Future<void>
-      _onStyleLoaded() async {
-    _capasCargadas =
-        false;
+  Future<void> _onStyleLoaded() async {
+    _capasCargadas = false;
+    _marcadorUsuario = null;
 
     if (!mounted) {
       return;
     }
 
     setState(() {
-      _estiloCargado =
-          true;
+      _estiloCargado = true;
     });
 
     if (_geoJsonCargado) {
@@ -346,18 +307,26 @@ class _MapaScreenState
     }
 
     await _centrarElSalvador();
+
+    // Si el tema cambió y el mapa se reconstruyó,
+    // volvemos a dibujar la ubicación conocida.
+    if (_posicionUsuario != null) {
+      await _dibujarUbicacion(
+        _posicionUsuario!,
+        centrar: false,
+      );
+    }
   }
 
   // ============================================================
-  // ADMIN0 - ADMIN3
+  // CAPAS ADMINISTRATIVAS
   // ============================================================
 
   Future<void> _agregarCapas() async {
     final controller =
         _mapController;
 
-    if (controller ==
-            null ||
+    if (controller == null ||
         _capasCargadas ||
         !_geoJsonCargado) {
       return;
@@ -365,50 +334,39 @@ class _MapaScreenState
 
     try {
       final esOscuro =
-          Theme.of(context)
-                  .brightness ==
+          Theme.of(context).brightness ==
               Brightness.dark;
 
-      // ========================================================
-      // FUENTES
-      // ========================================================
-
-      await controller
-          .addGeoJsonSource(
+      await controller.addGeoJsonSource(
         'merc-mask',
         _mascara!,
       );
 
-      await controller
-          .addGeoJsonSource(
+      await controller.addGeoJsonSource(
         'merc-admin0',
         _admin0!,
       );
 
-      await controller
-          .addGeoJsonSource(
+      await controller.addGeoJsonSource(
         'merc-admin1',
         _admin1!,
       );
 
-      await controller
-          .addGeoJsonSource(
+      await controller.addGeoJsonSource(
         'merc-admin2',
         _admin2!,
       );
 
-      await controller
-          .addGeoJsonSource(
+      await controller.addGeoJsonSource(
         'merc-admin3',
         _admin3!,
       );
 
       // ========================================================
-      // MÁSCARA EXTERIOR
+      // OCULTAR EXTERIOR DE EL SALVADOR
       // ========================================================
 
-      await controller
-          .addFillLayer(
+      await controller.addFillLayer(
         'merc-mask',
         'merc-mask-layer',
         FillLayerProperties(
@@ -416,8 +374,7 @@ class _MapaScreenState
               esOscuro
                   ? '#171320'
                   : '#FFF6ED',
-          fillOpacity:
-              1.0,
+          fillOpacity: 1.0,
           fillOutlineColor:
               esOscuro
                   ? '#171320'
@@ -426,18 +383,15 @@ class _MapaScreenState
       );
 
       // ========================================================
-      // TINTE GENERAL DE EL SALVADOR
+      // TINTE NARANJA
       // ========================================================
 
-      await controller
-          .addFillLayer(
+      await controller.addFillLayer(
         'merc-admin0',
         'merc-orange-overlay',
         const FillLayerProperties(
-          fillColor:
-              '#FF7E01',
-          fillOpacity:
-              0.035,
+          fillColor: '#FF7E01',
+          fillOpacity: 0.035,
         ),
       );
 
@@ -445,82 +399,62 @@ class _MapaScreenState
       // ADMIN3
       // ========================================================
 
-      await controller
-          .addLineLayer(
+      await controller.addLineLayer(
         'merc-admin3',
         'merc-admin3-line',
         const LineLayerProperties(
-          lineColor:
-              '#FFC078',
-          lineOpacity:
-              0.65,
-          lineWidth:
-              0.65,
+          lineColor: '#FFC078',
+          lineOpacity: 0.65,
+          lineWidth: 0.65,
         ),
-        minzoom:
-            13.0,
+        minzoom: 13.0,
       );
 
       // ========================================================
       // ADMIN2
       // ========================================================
 
-      await controller
-          .addLineLayer(
+      await controller.addLineLayer(
         'merc-admin2',
         'merc-admin2-line',
         const LineLayerProperties(
-          lineColor:
-              '#FF9A3D',
-          lineOpacity:
-              0.78,
-          lineWidth:
-              1.0,
+          lineColor: '#FF9A3D',
+          lineOpacity: 0.78,
+          lineWidth: 1.0,
         ),
-        minzoom:
-            10.0,
+        minzoom: 10.0,
       );
 
       // ========================================================
       // ADMIN1
       // ========================================================
 
-      await controller
-          .addLineLayer(
+      await controller.addLineLayer(
         'merc-admin1',
         'merc-admin1-line',
         const LineLayerProperties(
-          lineColor:
-              '#FF7E01',
-          lineOpacity:
-              0.90,
-          lineWidth:
-              1.5,
+          lineColor: '#FF7E01',
+          lineOpacity: 0.90,
+          lineWidth: 1.5,
         ),
-        minzoom:
-            7.5,
+        minzoom: 7.5,
       );
 
       // ========================================================
       // ADMIN0
       // ========================================================
 
-      await controller
-          .addLineLayer(
+      await controller.addLineLayer(
         'merc-admin0',
         'merc-admin0-line',
         const LineLayerProperties(
-          lineColor:
-              '#C95400',
-          lineOpacity:
-              1.0,
-          lineWidth:
-              3.0,
+          lineColor: '#C95400',
+          lineOpacity: 1.0,
+          lineWidth: 3.0,
         ),
       );
 
-      _capasCargadas =
-          true;
+      _capasCargadas = true;
     } catch (e) {
       debugPrint(
         'Error cargando capas: $e',
@@ -538,12 +472,324 @@ class _MapaScreenState
   }
 
   // ============================================================
-  // ZOOM
+  // OBTENER UBICACIÓN
+  // ============================================================
+
+  Future<void> _obtenerMiUbicacion() async {
+    if (_obteniendoUbicacion) {
+      return;
+    }
+
+    setState(() {
+      _obteniendoUbicacion = true;
+    });
+
+    try {
+      // ========================================================
+      // GPS / SERVICIO DE UBICACIÓN
+      // ========================================================
+
+      final bool servicioActivo =
+          await Geolocator
+              .isLocationServiceEnabled();
+
+      if (!servicioActivo) {
+        if (!mounted) {
+          return;
+        }
+
+        _mostrarDialogoGpsDesactivado();
+
+        return;
+      }
+
+      // ========================================================
+      // PERMISOS
+      // ========================================================
+
+      LocationPermission permiso =
+          await Geolocator.checkPermission();
+
+      if (permiso ==
+          LocationPermission.denied) {
+        permiso =
+            await Geolocator
+                .requestPermission();
+      }
+
+      if (permiso ==
+          LocationPermission.denied) {
+        if (!mounted) {
+          return;
+        }
+
+        _mostrarMensaje(
+          'Permiso de ubicación denegado.',
+        );
+
+        return;
+      }
+
+      if (permiso ==
+          LocationPermission.deniedForever) {
+        if (!mounted) {
+          return;
+        }
+
+        _mostrarDialogoPermisoPermanente();
+
+        return;
+      }
+
+      // ========================================================
+      // OBTENER POSICIÓN
+      // ========================================================
+
+      const LocationSettings settings =
+          LocationSettings(
+        accuracy:
+            LocationAccuracy.high,
+      );
+
+      final Position posicion =
+          await Geolocator
+              .getCurrentPosition(
+        locationSettings: settings,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _posicionUsuario = posicion;
+      });
+
+      await _dibujarUbicacion(
+        posicion,
+        centrar: true,
+      );
+    } catch (e) {
+      debugPrint(
+        'Error obteniendo ubicación: $e',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      _mostrarMensaje(
+        'No se pudo obtener tu ubicación.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _obteniendoUbicacion = false;
+        });
+      }
+    }
+  }
+
+  // ============================================================
+  // DIBUJAR UBICACIÓN
+  // ============================================================
+
+  Future<void> _dibujarUbicacion(
+    Position posicion, {
+    required bool centrar,
+  }) async {
+    final controller =
+        _mapController;
+
+    if (controller == null ||
+        !_estiloCargado) {
+      return;
+    }
+
+    final LatLng punto =
+        LatLng(
+      posicion.latitude,
+      posicion.longitude,
+    );
+
+    try {
+      if (_marcadorUsuario == null) {
+        _marcadorUsuario =
+            await controller.addCircle(
+          CircleOptions(
+            geometry: punto,
+            circleRadius: 9.0,
+            circleColor: '#FF7E01',
+            circleStrokeColor:
+                '#FFFFFF',
+            circleStrokeWidth: 3.0,
+            circleOpacity: 1.0,
+          ),
+        );
+      } else {
+        await controller.updateCircle(
+          _marcadorUsuario!,
+          CircleOptions(
+            geometry: punto,
+          ),
+        );
+      }
+
+      if (centrar) {
+        await controller.animateCamera(
+          CameraUpdate.newLatLngZoom(
+            punto,
+            15.0,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint(
+        'Error dibujando ubicación: $e',
+      );
+    }
+  }
+
+  // ============================================================
+  // GPS DESACTIVADO
+  // ============================================================
+
+  void _mostrarDialogoGpsDesactivado() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          icon: const Icon(
+            Icons.location_off_outlined,
+            color: _naranjaPrincipal,
+            size: 38,
+          ),
+          title: const Text(
+            'Ubicación desactivada',
+          ),
+          content: const Text(
+            'Activa la ubicación del dispositivo para poder mostrar tu posición en el mapa.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                );
+              },
+              child: const Text(
+                'Cancelar',
+              ),
+            ),
+            FilledButton(
+              style:
+                  FilledButton.styleFrom(
+                backgroundColor:
+                    _naranjaPrincipal,
+                foregroundColor:
+                    Colors.white,
+              ),
+              onPressed: () async {
+                Navigator.pop(
+                  dialogContext,
+                );
+
+                await Geolocator
+                    .openLocationSettings();
+              },
+              child: const Text(
+                'Abrir ajustes',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // PERMISO PERMANENTEMENTE DENEGADO
+  // ============================================================
+
+  void _mostrarDialogoPermisoPermanente() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          icon: const Icon(
+            Icons.gps_off_outlined,
+            color: _naranjaPrincipal,
+            size: 38,
+          ),
+          title: const Text(
+            'Permiso requerido',
+          ),
+          content: const Text(
+            'El permiso de ubicación está bloqueado. Puedes habilitarlo desde los ajustes de la aplicación.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                );
+              },
+              child: const Text(
+                'Cancelar',
+              ),
+            ),
+            FilledButton(
+              style:
+                  FilledButton.styleFrom(
+                backgroundColor:
+                    _naranjaPrincipal,
+                foregroundColor:
+                    Colors.white,
+              ),
+              onPressed: () async {
+                Navigator.pop(
+                  dialogContext,
+                );
+
+                await Geolocator
+                    .openAppSettings();
+              },
+              child: const Text(
+                'Abrir ajustes',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // MENSAJE
+  // ============================================================
+
+  void _mostrarMensaje(
+    String mensaje,
+  ) {
+    ScaffoldMessenger.of(context)
+        .hideCurrentSnackBar();
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+      SnackBar(
+        content: Text(
+          mensaje,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // ZOOM +
   // ============================================================
 
   Future<void> _acercar() async {
-    if (_mapController ==
-        null) {
+    if (_mapController == null) {
       return;
     }
 
@@ -563,9 +809,12 @@ class _MapaScreenState
     );
   }
 
+  // ============================================================
+  // ZOOM -
+  // ============================================================
+
   Future<void> _alejar() async {
-    if (_mapController ==
-        null) {
+    if (_mapController == null) {
       return;
     }
 
@@ -585,10 +834,12 @@ class _MapaScreenState
     );
   }
 
-  Future<void>
-      _centrarElSalvador() async {
-    if (_mapController ==
-        null) {
+  // ============================================================
+  // CENTRAR EL SALVADOR
+  // ============================================================
+
+  Future<void> _centrarElSalvador() async {
+    if (_mapController == null) {
       return;
     }
 
@@ -596,31 +847,28 @@ class _MapaScreenState
         .animateCamera(
       CameraUpdate.newLatLngBounds(
         _limitesElSalvador,
-        left:
-            25,
-        top:
-            80,
-        right:
-            25,
-        bottom:
-            70,
+        left: 25,
+        top: 80,
+        right: 25,
+        bottom: 70,
       ),
     );
   }
 
+  // ============================================================
+  // NIVEL ACTUAL
+  // ============================================================
+
   String _nivelActual() {
-    if (_zoomActual <
-        8.5) {
+    if (_zoomActual < 8.5) {
       return 'ADMIN0';
     }
 
-    if (_zoomActual <
-        10) {
+    if (_zoomActual < 10) {
       return 'ADMIN1';
     }
 
-    if (_zoomActual <
-        13) {
+    if (_zoomActual < 13) {
       return 'ADMIN2';
     }
 
@@ -636,13 +884,11 @@ class _MapaScreenState
     required IconData icon,
     required VoidCallback onPressed,
     required bool oscuro,
+    bool cargando = false,
   }) {
-    return FloatingActionButton
-        .small(
-      heroTag:
-          tag,
-      elevation:
-          3,
+    return FloatingActionButton.small(
+      heroTag: tag,
+      elevation: 3,
       backgroundColor:
           oscuro
               ? _panelOscuro
@@ -650,11 +896,24 @@ class _MapaScreenState
       foregroundColor:
           _naranjaPrincipal,
       onPressed:
-          onPressed,
+          cargando
+              ? null
+              : onPressed,
       child:
-          Icon(
-        icon,
-      ),
+          cargando
+              ? const SizedBox(
+                  width: 19,
+                  height: 19,
+                  child:
+                      CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color:
+                        _naranjaPrincipal,
+                  ),
+                )
+              : Icon(
+                  icon,
+                ),
     );
   }
 
@@ -667,8 +926,7 @@ class _MapaScreenState
     BuildContext context,
   ) {
     final oscuro =
-        Theme.of(context)
-                .brightness ==
+        Theme.of(context).brightness ==
             Brightness.dark;
 
     final fondo =
@@ -689,14 +947,15 @@ class _MapaScreenState
               );
 
     return Scaffold(
-      backgroundColor:
-          fondo,
-      body:
-          Stack(
+      backgroundColor: fondo,
+      body: Stack(
         children: [
+          // ====================================================
+          // MAPA
+          // ====================================================
+
           MapLibreMap(
-            key:
-                ValueKey(
+            key: ValueKey(
               oscuro
                   ? 'map-dark'
                   : 'map-light',
@@ -711,8 +970,7 @@ class _MapaScreenState
                 const CameraPosition(
               target:
                   _centroElSalvador,
-              zoom:
-                  8.5,
+              zoom: 8.5,
             ),
 
             cameraTargetBounds:
@@ -735,8 +993,16 @@ class _MapaScreenState
             compassEnabled:
                 false,
 
+            // No usamos la ubicación
+            // automática de MapLibre.
+            //
+            // Nosotros la controlamos
+            // con Geolocator.
             myLocationEnabled:
                 false,
+
+            myLocationTrackingMode:
+                MyLocationTrackingMode.none,
 
             onMapCreated:
                 _onMapCreated,
@@ -745,9 +1011,7 @@ class _MapaScreenState
                 _onStyleLoaded,
 
             onCameraMove:
-                (
-              position,
-            ) {
+                (position) {
               if ((position.zoom -
                           _zoomActual)
                       .abs() >
@@ -761,7 +1025,7 @@ class _MapaScreenState
           ),
 
           // ====================================================
-          // CARGANDO
+          // CARGANDO MAPA
           // ====================================================
 
           if (!_estiloCargado ||
@@ -769,8 +1033,7 @@ class _MapaScreenState
             Container(
               color:
                   fondo.withValues(
-                alpha:
-                    0.80,
+                alpha: 0.80,
               ),
               alignment:
                   Alignment.center,
@@ -786,8 +1049,7 @@ class _MapaScreenState
           // ====================================================
 
           SafeArea(
-            child:
-                Padding(
+            child: Padding(
               padding:
                   const EdgeInsets.fromLTRB(
                 12,
@@ -795,39 +1057,27 @@ class _MapaScreenState
                 80,
                 12,
               ),
-
-              child:
-                  Container(
-                height:
-                    52,
-
+              child: Container(
+                height: 52,
                 constraints:
                     const BoxConstraints(
-                  maxWidth:
-                      430,
+                  maxWidth: 430,
                 ),
-
                 padding:
                     const EdgeInsets.symmetric(
-                  horizontal:
-                      15,
+                  horizontal: 15,
                 ),
-
                 decoration:
                     BoxDecoration(
                   color:
                       panel.withValues(
-                    alpha:
-                        0.95,
+                    alpha: 0.95,
                   ),
-
                   borderRadius:
                       BorderRadius.circular(
                     18,
                   ),
-
-                  boxShadow:
-                      [
+                  boxShadow: [
                     BoxShadow(
                       color:
                           Colors.black
@@ -837,40 +1087,33 @@ class _MapaScreenState
                                 ? 0.35
                                 : 0.14,
                       ),
-                      blurRadius:
-                          10,
+                      blurRadius: 10,
                     ),
                   ],
                 ),
-
-                child:
-                    Row(
+                child: Row(
                   children: [
                     const Icon(
-                      Icons
-                          .map_outlined,
+                      Icons.map_outlined,
                       color:
                           _naranjaPrincipal,
                     ),
 
                     const SizedBox(
-                      width:
-                          9,
+                      width: 9,
                     ),
 
                     Expanded(
-                      child:
-                          Text(
+                      child: Text(
                         'Mapa de El Salvador',
-
+                        overflow:
+                            TextOverflow.ellipsis,
                         style:
                             TextStyle(
-                          color:
-                              texto,
+                          color: texto,
                           fontWeight:
                               FontWeight.bold,
-                          fontSize:
-                              16,
+                          fontSize: 16,
                         ),
                       ),
                     ),
@@ -881,109 +1124,167 @@ class _MapaScreenState
           ),
 
           // ====================================================
-          // CONTROLES
+          // CONTROLES DERECHA
           // ====================================================
 
           Positioned(
-            right:
-                15,
-
+            right: 15,
             top:
-                MediaQuery.of(
-                      context,
-                    ).padding.top +
+                MediaQuery.of(context)
+                        .padding
+                        .top +
                     12,
-
-            child:
-                Column(
+            child: Column(
               children: [
                 _boton(
-                  tag:
-                      'zoomMas',
-                  icon:
-                      Icons.add,
-                  onPressed:
-                      _acercar,
-                  oscuro:
-                      oscuro,
+                  tag: 'zoomMas',
+                  icon: Icons.add,
+                  onPressed: _acercar,
+                  oscuro: oscuro,
                 ),
 
                 const SizedBox(
-                  height:
-                      10,
+                  height: 10,
                 ),
 
                 _boton(
-                  tag:
-                      'zoomMenos',
-                  icon:
-                      Icons.remove,
-                  onPressed:
-                      _alejar,
-                  oscuro:
-                      oscuro,
+                  tag: 'zoomMenos',
+                  icon: Icons.remove,
+                  onPressed: _alejar,
+                  oscuro: oscuro,
                 ),
 
                 const SizedBox(
-                  height:
-                      10,
+                  height: 10,
                 ),
 
                 _boton(
-                  tag:
-                      'centrar',
+                  tag: 'centrar',
                   icon:
-                      Icons
-                          .center_focus_strong,
+                      Icons.center_focus_strong,
                   onPressed:
                       _centrarElSalvador,
-                  oscuro:
-                      oscuro,
+                  oscuro: oscuro,
+                ),
+
+                const SizedBox(
+                  height: 10,
+                ),
+
+                // ===============================================
+                // MI UBICACIÓN
+                // ===============================================
+
+                _boton(
+                  tag: 'miUbicacion',
+                  icon:
+                      _posicionUsuario != null
+                          ? Icons.my_location
+                          : Icons
+                              .location_searching,
+                  onPressed:
+                      _obtenerMiUbicacion,
+                  oscuro: oscuro,
+                  cargando:
+                      _obteniendoUbicacion,
                 ),
               ],
             ),
           ),
 
           // ====================================================
+          // INDICADOR UBICACIÓN ACTIVA
+          // ====================================================
+
+          if (_posicionUsuario != null)
+            Positioned(
+              right: 15,
+              bottom: 25,
+              child: SafeArea(
+                top: false,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration:
+                      BoxDecoration(
+                    color:
+                        panel.withValues(
+                      alpha: 0.95,
+                    ),
+                    borderRadius:
+                        BorderRadius.circular(
+                      20,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color:
+                            Colors.black
+                                .withValues(
+                          alpha:
+                              oscuro
+                                  ? 0.35
+                                  : 0.14,
+                        ),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisSize:
+                        MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.my_location,
+                        size: 16,
+                        color:
+                            _naranjaPrincipal,
+                      ),
+                      SizedBox(
+                        width: 6,
+                      ),
+                      Text(
+                        'Mi ubicación',
+                        style: TextStyle(
+                          fontWeight:
+                              FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // ====================================================
           // NIVEL
           // ====================================================
 
           Positioned(
-            left:
-                15,
-            bottom:
-                25,
-
-            child:
-                SafeArea(
-              top:
-                  false,
-
-              child:
-                  Container(
+            left: 15,
+            bottom: 25,
+            child: SafeArea(
+              top: false,
+              child: Container(
                 padding:
                     const EdgeInsets.symmetric(
-                  horizontal:
-                      14,
-                  vertical:
-                      9,
+                  horizontal: 14,
+                  vertical: 9,
                 ),
-
                 decoration:
                     BoxDecoration(
                   color:
                       panel.withValues(
-                    alpha:
-                        0.95,
+                    alpha: 0.95,
                   ),
-
                   borderRadius:
                       BorderRadius.circular(
                     20,
                   ),
-
-                  boxShadow:
-                      [
+                  boxShadow: [
                     BoxShadow(
                       color:
                           Colors.black
@@ -993,42 +1294,33 @@ class _MapaScreenState
                                 ? 0.35
                                 : 0.14,
                       ),
-                      blurRadius:
-                          10,
+                      blurRadius: 10,
                     ),
                   ],
                 ),
-
-                child:
-                    Row(
+                child: Row(
                   mainAxisSize:
                       MainAxisSize.min,
                   children: [
                     const Icon(
-                      Icons
-                          .layers_outlined,
+                      Icons.layers_outlined,
                       color:
                           _naranjaPrincipal,
-                      size:
-                          18,
+                      size: 18,
                     ),
 
                     const SizedBox(
-                      width:
-                          6,
+                      width: 6,
                     ),
 
                     Text(
                       '${_nivelActual()} · Zoom ${_zoomActual.toStringAsFixed(1)}',
-
                       style:
                           TextStyle(
-                        color:
-                            texto,
+                        color: texto,
                         fontWeight:
                             FontWeight.bold,
-                        fontSize:
-                            12,
+                        fontSize: 12,
                       ),
                     ),
                   ],
@@ -1041,11 +1333,9 @@ class _MapaScreenState
           // ERROR
           // ====================================================
 
-          if (_error !=
-              null)
+          if (_error != null)
             Center(
-              child:
-                  Container(
+              child: Container(
                 margin:
                     const EdgeInsets.all(
                   25,
@@ -1056,22 +1346,19 @@ class _MapaScreenState
                 ),
                 decoration:
                     BoxDecoration(
-                  color:
-                      panel,
+                  color: panel,
                   borderRadius:
                       BorderRadius.circular(
                     18,
                   ),
                 ),
-                child:
-                    Text(
+                child: Text(
                   _error!,
                   textAlign:
                       TextAlign.center,
                   style:
                       TextStyle(
-                    color:
-                        texto,
+                    color: texto,
                   ),
                 ),
               ),
