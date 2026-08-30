@@ -2,8 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 
 class MapaScreen extends StatefulWidget {
   const MapaScreen({
@@ -15,136 +14,166 @@ class MapaScreen extends StatefulWidget {
       _MapaScreenState();
 }
 
-class _MapaScreenState extends State<MapaScreen> {
-  // ============================================
-  // CONTROLADOR DEL MAPA
-  // ============================================
+class _MapaScreenState
+    extends State<MapaScreen> {
+  MapLibreMapController?
+      _mapController;
 
-  final MapController mapController =
-      MapController();
+  // ============================================================
+  // EL SALVADOR
+  // ============================================================
 
-  // ============================================
-  // CENTRO DE EL SALVADOR
-  // ============================================
-
-  static const LatLng centroElSalvador =
+  static const LatLng
+      _centroElSalvador =
       LatLng(
     13.7942,
     -88.8965,
   );
 
-  // ============================================
-  // PALETA MERCALISHUAT
-  // ============================================
+  static final LatLngBounds
+      _limitesElSalvador =
+      LatLngBounds(
+    southwest: const LatLng(
+      13.00,
+      -90.25,
+    ),
+    northeast: const LatLng(
+      14.55,
+      -87.55,
+    ),
+  );
 
-  static const Color naranjaPrincipal =
-      Color(0xFFFF7E01);
+  static const double
+      _zoomMinimo = 7.4;
 
-  static const Color naranjaOscuro =
-      Color(0xFFE86600);
+  static const double
+      _zoomMaximo = 19.0;
 
-  static const Color naranjaMedio =
-      Color(0xFFFF9A3D);
+  double _zoomActual = 8.5;
 
-  static const Color naranjaClaro =
-      Color(0xFFFFC078);
+  // ============================================================
+  // ESTILOS
+  // ============================================================
 
-  static const Color moradoOscuro =
-      Color(0xFF2A2045);
+  static const String
+      _estiloClaro =
+      'assets/mapas/openfreemap_mercali_light.json';
 
-  static const Color fondoOscuro =
-      Color(0xFF171320);
+  static const String
+      _estiloOscuro =
+      'assets/mapas/openfreemap_mercali_dark.json';
 
-  static const Color fondoClaro =
-      Color(0xFFF7F7F7);
+  // ============================================================
+  // COLORES UI
+  // ============================================================
 
-  // ============================================
-  // POLÍGONOS ADMINISTRATIVOS
-  // ============================================
+  static const Color
+      _naranjaPrincipal =
+      Color(
+    0xFFFF7E01,
+  );
 
-  List<Polygon> admin0Poligonos = [];
-  List<Polygon> admin1Poligonos = [];
-  List<Polygon> admin2Poligonos = [];
+  static const Color
+      _panelOscuro =
+      Color(
+    0xFF2A2045,
+  );
 
-  // ADM3 queda preparado para el futuro.
-  List<Polygon> admin3Poligonos = [];
+  static const Color
+      _fondoOscuro =
+      Color(
+    0xFF171320,
+  );
 
-  // ============================================
-  // ETIQUETAS
-  // ============================================
+  static const Color
+      _fondoClaro =
+      Color(
+    0xFFFFF6ED,
+  );
 
-  final List<_EtiquetaMapa>
-      admin1Etiquetas = [];
+  // ============================================================
+  // GEOJSON
+  // ============================================================
 
-  final List<_EtiquetaMapa>
-      admin2Etiquetas = [];
+  Map<String, dynamic>? _admin0;
 
-  final List<_EtiquetaMapa>
-      admin3Etiquetas = [];
+  Map<String, dynamic>? _admin1;
 
-  // ============================================
+  Map<String, dynamic>? _admin2;
+
+  Map<String, dynamic>? _admin3;
+
+  Map<String, dynamic>? _mascara;
+
+  // ============================================================
   // ESTADO
-  // ============================================
+  // ============================================================
 
-  bool cargando = true;
+  bool _geoJsonCargado =
+      false;
 
-  String? error;
+  bool _estiloCargado =
+      false;
 
-  double zoomActual = 8.0;
+  bool _capasCargadas =
+      false;
+
+  String? _error;
 
   @override
   void initState() {
     super.initState();
 
-    cargarGeoJson();
+    _cargarGeoJson();
   }
 
-  // ============================================
-  // CARGAR GEOJSON
-  // ============================================
+  // ============================================================
+  // GEOJSON
+  // ============================================================
 
-  Future<void> cargarGeoJson() async {
+  Future<void> _cargarGeoJson() async {
     try {
-      final admin0Texto =
-          await rootBundle.loadString(
-        'assets/mapas/SV-Map-ADM0.geojson',
+      final textos =
+          await Future.wait(
+        [
+          rootBundle.loadString(
+            'assets/mapas/SV-Map-ADM0.geojson',
+          ),
+          rootBundle.loadString(
+            'assets/mapas/SV-Map-ADM1.geojson',
+          ),
+          rootBundle.loadString(
+            'assets/mapas/SV-Map-ADM2.geojson',
+          ),
+          rootBundle.loadString(
+            'assets/mapas/SV-Map-ADM3.geojson',
+          ),
+        ],
       );
 
-      final admin1Texto =
-          await rootBundle.loadString(
-        'assets/mapas/SV-Map-ADM1.geojson',
-      );
-
-      final admin2Texto =
-          await rootBundle.loadString(
-        'assets/mapas/SV-Map-ADM2.geojson',
-      );
-
-      final Map<String, dynamic> admin0 =
+      _admin0 =
           jsonDecode(
-        admin0Texto,
+        textos[0],
       );
 
-      final Map<String, dynamic> admin1 =
+      _admin1 =
           jsonDecode(
-        admin1Texto,
+        textos[1],
       );
 
-      final Map<String, dynamic> admin2 =
+      _admin2 =
           jsonDecode(
-        admin2Texto,
+        textos[2],
       );
 
-      procesarAdmin0(
-        admin0,
+      _admin3 =
+          jsonDecode(
+        textos[3],
       );
 
-      procesarAdmin1(
-        admin1,
-      );
-
-      procesarAdmin2(
-        admin2,
+      _mascara =
+          _crearMascara(
+        _admin0!,
       );
 
       if (!mounted) {
@@ -152,1165 +181,696 @@ class _MapaScreenState extends State<MapaScreen> {
       }
 
       setState(() {
-        cargando = false;
+        _geoJsonCargado =
+            true;
+
+        _error =
+            null;
       });
+
+      if (_estiloCargado) {
+        await _agregarCapas();
+      }
     } catch (e) {
       if (!mounted) {
         return;
       }
 
       setState(() {
-        cargando = false;
-
-        error =
-            'No se pudieron cargar los archivos GeoJSON.\n$e';
+        _error =
+            'Error cargando GeoJSON:\n$e';
       });
     }
   }
 
-  // ============================================
-  // ADMIN0
-  // ============================================
+  // ============================================================
+  // MÁSCARA
+  //
+  // Oculta todo lo que está
+  // fuera de El Salvador.
+  // ============================================================
 
-  void procesarAdmin0(
-    Map<String, dynamic> geojson,
+  Map<String, dynamic>
+      _crearMascara(
+    Map<String, dynamic> admin0,
   ) {
+    final List<dynamic>
+        huecos = [];
+
     final features =
-        geojson['features'];
+        admin0['features'];
 
-    if (features is! List) {
-      return;
-    }
+    if (features is List) {
+      for (final feature
+          in features) {
+        final geometry =
+            feature['geometry'];
 
-    final nuevosPoligonos =
-        <Polygon>[];
+        if (geometry ==
+            null) {
+          continue;
+        }
 
-    for (final feature in features) {
-      final geometry =
-          feature['geometry'];
+        final tipo =
+            geometry['type']
+                    ?.toString() ??
+                '';
 
-      if (geometry == null) {
-        continue;
-      }
+        final coordinates =
+            geometry[
+                'coordinates'];
 
-      final tipo =
-          geometry['type'];
+        if (tipo ==
+                'Polygon' &&
+            coordinates
+                is List &&
+            coordinates
+                .isNotEmpty) {
+          final exterior =
+              coordinates[0];
 
-      final coordinates =
-          geometry['coordinates'];
+          if (exterior
+              is List) {
+            huecos.add(
+              exterior.reversed
+                  .toList(),
+            );
+          }
+        }
 
-      if (tipo == 'Polygon') {
-        nuevosPoligonos.addAll(
-          crearPoligonosDesdePolygon(
-            coordinates,
-            nivel: 0,
-          ),
-        );
-      }
-
-      if (tipo == 'MultiPolygon') {
-        nuevosPoligonos.addAll(
-          crearPoligonosDesdeMultiPolygon(
-            coordinates,
-            nivel: 0,
-          ),
-        );
-      }
-    }
-
-    admin0Poligonos =
-        nuevosPoligonos;
-  }
-
-  // ============================================
-  // ADMIN1
-  // ============================================
-
-  void procesarAdmin1(
-    Map<String, dynamic> geojson,
-  ) {
-    final features =
-        geojson['features'];
-
-    if (features is! List) {
-      return;
-    }
-
-    final nuevosPoligonos =
-        <Polygon>[];
-
-    final nuevasEtiquetas =
-        <_EtiquetaMapa>[];
-
-    for (final feature in features) {
-      final geometry =
-          feature['geometry'];
-
-      if (geometry == null) {
-        continue;
-      }
-
-      final properties =
-          Map<String, dynamic>.from(
-        feature['properties'] ?? {},
-      );
-
-      final nombre =
-          limpiarNombre(
-        obtenerNombre(
-          properties,
-        ),
-      );
-
-      final tipo =
-          geometry['type'];
-
-      final coordinates =
-          geometry['coordinates'];
-
-      final puntosFeature =
-          <LatLng>[];
-
-      if (tipo == 'Polygon') {
-        final poligonos =
-            crearPoligonosDesdePolygon(
-          coordinates,
-          nivel: 1,
-        );
-
-        nuevosPoligonos.addAll(
-          poligonos,
-        );
-
-        for (final poligono
-            in poligonos) {
-          puntosFeature.addAll(
-            poligono.points,
-          );
+        if (tipo ==
+                'MultiPolygon' &&
+            coordinates
+                is List) {
+          for (final polygon
+              in coordinates) {
+            if (polygon
+                    is List &&
+                polygon
+                    .isNotEmpty &&
+                polygon[0]
+                    is List) {
+              huecos.add(
+                (polygon[0]
+                        as List)
+                    .reversed
+                    .toList(),
+              );
+            }
+          }
         }
       }
-
-      if (tipo == 'MultiPolygon') {
-        final poligonos =
-            crearPoligonosDesdeMultiPolygon(
-          coordinates,
-          nivel: 1,
-        );
-
-        nuevosPoligonos.addAll(
-          poligonos,
-        );
-
-        for (final poligono
-            in poligonos) {
-          puntosFeature.addAll(
-            poligono.points,
-          );
-        }
-      }
-
-      if (puntosFeature.isNotEmpty &&
-          nombre.isNotEmpty) {
-        nuevasEtiquetas.add(
-          _EtiquetaMapa(
-            nombre: nombre,
-            posicion:
-                calcularCentro(
-              puntosFeature,
-            ),
-          ),
-        );
-      }
     }
 
-    admin1Poligonos =
-        nuevosPoligonos;
-
-    admin1Etiquetas
-      ..clear()
-      ..addAll(
-        nuevasEtiquetas,
-      );
-  }
-
-  // ============================================
-  // ADMIN2
-  // ============================================
-
-  void procesarAdmin2(
-    Map<String, dynamic> geojson,
-  ) {
-    final features =
-        geojson['features'];
-
-    if (features is! List) {
-      return;
-    }
-
-    final nuevosPoligonos =
-        <Polygon>[];
-
-    final nuevasEtiquetas =
-        <_EtiquetaMapa>[];
-
-    for (final feature in features) {
-      final geometry =
-          feature['geometry'];
-
-      if (geometry == null) {
-        continue;
-      }
-
-      final properties =
-          Map<String, dynamic>.from(
-        feature['properties'] ?? {},
-      );
-
-      final nombre =
-          limpiarNombre(
-        obtenerNombre(
-          properties,
-        ),
-      );
-
-      final tipo =
-          geometry['type'];
-
-      final coordinates =
-          geometry['coordinates'];
-
-      final puntosFeature =
-          <LatLng>[];
-
-      if (tipo == 'Polygon') {
-        final poligonos =
-            crearPoligonosDesdePolygon(
-          coordinates,
-          nivel: 2,
-        );
-
-        nuevosPoligonos.addAll(
-          poligonos,
-        );
-
-        for (final poligono
-            in poligonos) {
-          puntosFeature.addAll(
-            poligono.points,
-          );
-        }
-      }
-
-      if (tipo == 'MultiPolygon') {
-        final poligonos =
-            crearPoligonosDesdeMultiPolygon(
-          coordinates,
-          nivel: 2,
-        );
-
-        nuevosPoligonos.addAll(
-          poligonos,
-        );
-
-        for (final poligono
-            in poligonos) {
-          puntosFeature.addAll(
-            poligono.points,
-          );
-        }
-      }
-
-      if (puntosFeature.isNotEmpty &&
-          nombre.isNotEmpty) {
-        nuevasEtiquetas.add(
-          _EtiquetaMapa(
-            nombre: nombre,
-            posicion:
-                calcularCentro(
-              puntosFeature,
-            ),
-          ),
-        );
-      }
-    }
-
-    admin2Poligonos =
-        nuevosPoligonos;
-
-    admin2Etiquetas
-      ..clear()
-      ..addAll(
-        nuevasEtiquetas,
-      );
-  }
-
-  // ============================================
-  // OBTENER NOMBRE
-  // ============================================
-
-  String obtenerNombre(
-    Map<String, dynamic> properties,
-  ) {
-    final posiblesCampos = [
-      'shapeName',
-      'NAME_3',
-      'NAME_2',
-      'NAME_1',
-      'NAME',
-      'name',
-      'ADM3_ES',
-      'ADM3',
-      'ADM2_ES',
-      'ADM2',
-      'ADM1_ES',
-      'ADM1',
-      'Distrito',
-      'distrito',
-      'Municipio',
-      'municipio',
-      'Departamento',
-      'departamento',
+    final exterior = [
+      [-92.0, 12.0],
+      [-85.5, 12.0],
+      [-85.5, 16.0],
+      [-92.0, 16.0],
+      [-92.0, 12.0],
     ];
 
-    for (final campo
-        in posiblesCampos) {
-      final valor =
-          properties[campo];
-
-      if (valor != null &&
-          valor
-              .toString()
-              .trim()
-              .isNotEmpty) {
-        return valor
-            .toString()
-            .trim();
-      }
-    }
-
-    return '';
+    return {
+      'type':
+          'FeatureCollection',
+      'features': [
+        {
+          'type':
+              'Feature',
+          'properties':
+              <String, dynamic>{},
+          'geometry': {
+            'type':
+                'Polygon',
+            'coordinates': [
+              exterior,
+              ...huecos,
+            ],
+          },
+        },
+      ],
+    };
   }
 
-  // ============================================
-  // LIMPIAR NOMBRES
-  // ============================================
+  // ============================================================
+  // MAPA
+  // ============================================================
 
-  String limpiarNombre(
-    String nombre,
+  void _onMapCreated(
+    MapLibreMapController controller,
   ) {
-    return nombre
-        .replaceFirst(
-          RegExp(
-            r'^Departamento de\s+',
-            caseSensitive: false,
-          ),
-          '',
-        )
-        .replaceFirst(
-          RegExp(
-            r'^Municipio de\s+',
-            caseSensitive: false,
-          ),
-          '',
-        )
-        .replaceFirst(
-          RegExp(
-            r'^Distrito de\s+',
-            caseSensitive: false,
-          ),
-          '',
-        )
-        .trim();
+    _mapController =
+        controller;
   }
 
-  // ============================================
-  // POLYGON
-  // ============================================
+  // ============================================================
+  // ESTILO CARGADO
+  // ============================================================
 
-  List<Polygon>
-      crearPoligonosDesdePolygon(
-    dynamic coordinates, {
-    required int nivel,
-  }) {
-    final resultado =
-        <Polygon>[];
+  Future<void>
+      _onStyleLoaded() async {
+    _capasCargadas =
+        false;
 
-    if (coordinates is! List ||
-        coordinates.isEmpty) {
-      return resultado;
+    if (!mounted) {
+      return;
     }
 
-    final exterior =
-        coordinates.first;
+    setState(() {
+      _estiloCargado =
+          true;
+    });
 
-    if (exterior is! List) {
-      return resultado;
+    if (_geoJsonCargado) {
+      await _agregarCapas();
     }
 
-    final puntos =
-        convertirCoordenadas(
-      exterior,
-    );
+    await _centrarElSalvador();
+  }
 
-    if (puntos.length < 3) {
-      return resultado;
+  // ============================================================
+  // ADMIN0 - ADMIN3
+  // ============================================================
+
+  Future<void> _agregarCapas() async {
+    final controller =
+        _mapController;
+
+    if (controller ==
+            null ||
+        _capasCargadas ||
+        !_geoJsonCargado) {
+      return;
     }
 
-    Color colorRelleno =
-        Colors.transparent;
+    try {
+      final esOscuro =
+          Theme.of(context)
+                  .brightness ==
+              Brightness.dark;
 
-    Color colorBorde =
-        naranjaOscuro;
+      // ========================================================
+      // FUENTES
+      // ========================================================
 
-    double anchoBorde =
-        3.5;
-
-    // ========================================
-    // ADMIN0
-    // BORDE NACIONAL GRUESO
-    // ========================================
-
-    if (nivel == 0) {
-      colorRelleno =
-          Colors.transparent;
-
-      colorBorde =
-          naranjaOscuro;
-
-      anchoBorde =
-          3.5;
-    }
-
-    // ========================================
-    // ADMIN1
-    // NARANJA PRINCIPAL
-    // ========================================
-
-    if (nivel == 1) {
-      colorRelleno =
-          naranjaPrincipal.withValues(
-        alpha: 0.16,
+      await controller
+          .addGeoJsonSource(
+        'merc-mask',
+        _mascara!,
       );
 
-      colorBorde =
-          naranjaPrincipal;
-
-      anchoBorde =
-          2.0;
-    }
-
-    // ========================================
-    // ADMIN2
-    // BORDE MÁS FINO
-    // ========================================
-
-    if (nivel == 2) {
-      colorRelleno =
-          naranjaMedio.withValues(
-        alpha: 0.08,
+      await controller
+          .addGeoJsonSource(
+        'merc-admin0',
+        _admin0!,
       );
 
-      colorBorde =
-          naranjaMedio;
-
-      anchoBorde =
-          1.1;
-    }
-
-    // ========================================
-    // ADMIN3
-    // BORDE TODAVÍA MÁS FINO
-    // ========================================
-
-    if (nivel == 3) {
-      colorRelleno =
-          naranjaClaro.withValues(
-        alpha: 0.05,
+      await controller
+          .addGeoJsonSource(
+        'merc-admin1',
+        _admin1!,
       );
 
-      colorBorde =
-          naranjaClaro;
+      await controller
+          .addGeoJsonSource(
+        'merc-admin2',
+        _admin2!,
+      );
 
-      anchoBorde =
-          0.7;
+      await controller
+          .addGeoJsonSource(
+        'merc-admin3',
+        _admin3!,
+      );
+
+      // ========================================================
+      // MÁSCARA EXTERIOR
+      // ========================================================
+
+      await controller
+          .addFillLayer(
+        'merc-mask',
+        'merc-mask-layer',
+        FillLayerProperties(
+          fillColor:
+              esOscuro
+                  ? '#171320'
+                  : '#FFF6ED',
+          fillOpacity:
+              1.0,
+          fillOutlineColor:
+              esOscuro
+                  ? '#171320'
+                  : '#FFF6ED',
+        ),
+      );
+
+      // ========================================================
+      // TINTE GENERAL DE EL SALVADOR
+      // ========================================================
+
+      await controller
+          .addFillLayer(
+        'merc-admin0',
+        'merc-orange-overlay',
+        const FillLayerProperties(
+          fillColor:
+              '#FF7E01',
+          fillOpacity:
+              0.035,
+        ),
+      );
+
+      // ========================================================
+      // ADMIN3
+      // ========================================================
+
+      await controller
+          .addLineLayer(
+        'merc-admin3',
+        'merc-admin3-line',
+        const LineLayerProperties(
+          lineColor:
+              '#FFC078',
+          lineOpacity:
+              0.65,
+          lineWidth:
+              0.65,
+        ),
+        minzoom:
+            13.0,
+      );
+
+      // ========================================================
+      // ADMIN2
+      // ========================================================
+
+      await controller
+          .addLineLayer(
+        'merc-admin2',
+        'merc-admin2-line',
+        const LineLayerProperties(
+          lineColor:
+              '#FF9A3D',
+          lineOpacity:
+              0.78,
+          lineWidth:
+              1.0,
+        ),
+        minzoom:
+            10.0,
+      );
+
+      // ========================================================
+      // ADMIN1
+      // ========================================================
+
+      await controller
+          .addLineLayer(
+        'merc-admin1',
+        'merc-admin1-line',
+        const LineLayerProperties(
+          lineColor:
+              '#FF7E01',
+          lineOpacity:
+              0.90,
+          lineWidth:
+              1.5,
+        ),
+        minzoom:
+            7.5,
+      );
+
+      // ========================================================
+      // ADMIN0
+      // ========================================================
+
+      await controller
+          .addLineLayer(
+        'merc-admin0',
+        'merc-admin0-line',
+        const LineLayerProperties(
+          lineColor:
+              '#C95400',
+          lineOpacity:
+              1.0,
+          lineWidth:
+              3.0,
+        ),
+      );
+
+      _capasCargadas =
+          true;
+    } catch (e) {
+      debugPrint(
+        'Error cargando capas: $e',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _error =
+            'Error agregando capas:\n$e';
+      });
+    }
+  }
+
+  // ============================================================
+  // ZOOM
+  // ============================================================
+
+  Future<void> _acercar() async {
+    if (_mapController ==
+        null) {
+      return;
     }
 
-    resultado.add(
-      Polygon(
-        points:
-            puntos,
+    final zoom =
+        (_zoomActual + 1)
+            .clamp(
+              _zoomMinimo,
+              _zoomMaximo,
+            )
+            .toDouble();
 
-        color:
-            colorRelleno,
-
-        borderColor:
-            colorBorde,
-
-        borderStrokeWidth:
-            anchoBorde,
+    await _mapController!
+        .animateCamera(
+      CameraUpdate.zoomTo(
+        zoom,
       ),
     );
-
-    return resultado;
   }
 
-  // ============================================
-  // MULTIPOLYGON
-  // ============================================
-
-  List<Polygon>
-      crearPoligonosDesdeMultiPolygon(
-    dynamic coordinates, {
-    required int nivel,
-  }) {
-    final resultado =
-        <Polygon>[];
-
-    if (coordinates is! List) {
-      return resultado;
+  Future<void> _alejar() async {
+    if (_mapController ==
+        null) {
+      return;
     }
 
-    for (final polygonCoordinates
-        in coordinates) {
-      resultado.addAll(
-        crearPoligonosDesdePolygon(
-          polygonCoordinates,
-          nivel: nivel,
-        ),
-      );
-    }
+    final zoom =
+        (_zoomActual - 1)
+            .clamp(
+              _zoomMinimo,
+              _zoomMaximo,
+            )
+            .toDouble();
 
-    return resultado;
-  }
-
-  // ============================================
-  // COORDENADAS
-  // GEOJSON = LONGITUD, LATITUD
-  // FLUTTER = LATITUD, LONGITUD
-  // ============================================
-
-  List<LatLng> convertirCoordenadas(
-    dynamic coordinates,
-  ) {
-    final puntos =
-        <LatLng>[];
-
-    if (coordinates is! List) {
-      return puntos;
-    }
-
-    for (final coordinate
-        in coordinates) {
-      if (coordinate is! List ||
-          coordinate.length < 2) {
-        continue;
-      }
-
-      final longitud =
-          (coordinate[0] as num)
-              .toDouble();
-
-      final latitud =
-          (coordinate[1] as num)
-              .toDouble();
-
-      puntos.add(
-        LatLng(
-          latitud,
-          longitud,
-        ),
-      );
-    }
-
-    return puntos;
-  }
-
-  // ============================================
-  // CENTRO APROXIMADO
-  // ============================================
-
-  LatLng calcularCentro(
-    List<LatLng> puntos,
-  ) {
-    double latitud = 0;
-    double longitud = 0;
-
-    for (final punto in puntos) {
-      latitud +=
-          punto.latitude;
-
-      longitud +=
-          punto.longitude;
-    }
-
-    return LatLng(
-      latitud /
-          puntos.length,
-
-      longitud /
-          puntos.length,
+    await _mapController!
+        .animateCamera(
+      CameraUpdate.zoomTo(
+        zoom,
+      ),
     );
   }
 
-  // ============================================
-  // CENTRAR EL SALVADOR
-  // ============================================
+  Future<void>
+      _centrarElSalvador() async {
+    if (_mapController ==
+        null) {
+      return;
+    }
 
-  void centrarElSalvador() {
-    mapController.move(
-      centroElSalvador,
-      8.0,
+    await _mapController!
+        .animateCamera(
+      CameraUpdate.newLatLngBounds(
+        _limitesElSalvador,
+        left:
+            25,
+        top:
+            80,
+        right:
+            25,
+        bottom:
+            70,
+      ),
     );
   }
 
-  // ============================================
-  // NIVEL ACTUAL
-  // ============================================
-
-  String obtenerNivelActual() {
-    if (zoomActual < 8.2) {
+  String _nivelActual() {
+    if (_zoomActual <
+        8.5) {
       return 'ADMIN0';
     }
 
-    if (zoomActual < 9.5) {
+    if (_zoomActual <
+        10) {
       return 'ADMIN1';
     }
 
-    if (zoomActual < 12.5) {
+    if (_zoomActual <
+        13) {
       return 'ADMIN2';
     }
 
     return 'ADMIN3';
   }
 
-  // ============================================
+  // ============================================================
+  // BOTÓN
+  // ============================================================
+
+  Widget _boton({
+    required String tag,
+    required IconData icon,
+    required VoidCallback onPressed,
+    required bool oscuro,
+  }) {
+    return FloatingActionButton
+        .small(
+      heroTag:
+          tag,
+      elevation:
+          3,
+      backgroundColor:
+          oscuro
+              ? _panelOscuro
+              : Colors.white,
+      foregroundColor:
+          _naranjaPrincipal,
+      onPressed:
+          onPressed,
+      child:
+          Icon(
+        icon,
+      ),
+    );
+  }
+
+  // ============================================================
   // BUILD
-  // ============================================
+  // ============================================================
 
   @override
   Widget build(
     BuildContext context,
   ) {
-    final bool esOscuro =
-        Theme.of(context).brightness ==
+    final oscuro =
+        Theme.of(context)
+                .brightness ==
             Brightness.dark;
 
-    final Color colorTexto =
-        esOscuro
+    final fondo =
+        oscuro
+            ? _fondoOscuro
+            : _fondoClaro;
+
+    final panel =
+        oscuro
+            ? _panelOscuro
+            : Colors.white;
+
+    final texto =
+        oscuro
             ? Colors.white
             : const Color(
-                0xFF202020,
+                0xFF512A12,
               );
-
-    final Color colorFondo =
-        esOscuro
-            ? fondoOscuro
-            : fondoClaro;
-
-    // ============================================
-    // CARGANDO
-    // ============================================
-
-    if (cargando) {
-      return Scaffold(
-        backgroundColor:
-            colorFondo,
-
-        body: const Center(
-          child:
-              CircularProgressIndicator(
-            color:
-                naranjaPrincipal,
-          ),
-        ),
-      );
-    }
-
-    // ============================================
-    // ERROR
-    // ============================================
-
-    if (error != null) {
-      return Scaffold(
-        backgroundColor:
-            colorFondo,
-
-        body: Center(
-          child: Padding(
-            padding:
-                const EdgeInsets.all(
-              25,
-            ),
-
-            child: Column(
-              mainAxisSize:
-                  MainAxisSize.min,
-
-              children: [
-                const Icon(
-                  Icons.map_outlined,
-                  size: 80,
-                  color:
-                      naranjaPrincipal,
-                ),
-
-                const SizedBox(
-                  height: 20,
-                ),
-
-                Text(
-                  error!,
-                  textAlign:
-                      TextAlign.center,
-                ),
-
-                const SizedBox(
-                  height: 20,
-                ),
-
-                ElevatedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      cargando = true;
-                      error = null;
-                    });
-
-                    cargarGeoJson();
-                  },
-
-                  icon:
-                      const Icon(
-                    Icons.refresh,
-                  ),
-
-                  label:
-                      const Text(
-                    'Reintentar',
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
 
     return Scaffold(
       backgroundColor:
-          colorFondo,
-
-      body: Stack(
+          fondo,
+      body:
+          Stack(
         children: [
-          // ========================================
-          // MAPA
-          // ========================================
-
-          FlutterMap(
-            mapController:
-                mapController,
-
-            options: MapOptions(
-              initialCenter:
-                  centroElSalvador,
-
-              initialZoom:
-                  8.0,
-
-              minZoom:
-                  7.0,
-
-              maxZoom:
-                  16.0,
-
-              backgroundColor:
-                  colorFondo,
-
-              onPositionChanged:
-                  (
-                position,
-                hasGesture,
-              ) {
-                final nuevoZoom =
-                    position.zoom;
-
-                if ((nuevoZoom -
-                            zoomActual)
-                        .abs() >
-                    0.1) {
-                  setState(() {
-                    zoomActual =
-                        nuevoZoom;
-                  });
-                }
-              },
+          MapLibreMap(
+            key:
+                ValueKey(
+              oscuro
+                  ? 'map-dark'
+                  : 'map-light',
             ),
 
-            children: [
-              // ====================================
-              // NO HAY TILELAYER
-              // ====================================
-              //
-              // Sin OpenStreetMap.
-              // Así evitamos nombres, carreteras
-              // y ruido visual.
-              //
+            styleString:
+                oscuro
+                    ? _estiloOscuro
+                    : _estiloClaro,
 
-              // ====================================
-              // ADMIN3
-              // PREPARADO PARA EL FUTURO
-              // ====================================
+            initialCameraPosition:
+                const CameraPosition(
+              target:
+                  _centroElSalvador,
+              zoom:
+                  8.5,
+            ),
 
-              if (zoomActual >= 12.5 &&
-                  admin3Poligonos.isNotEmpty)
-                PolygonLayer(
-                  polygons:
-                      admin3Poligonos,
-                ),
+            cameraTargetBounds:
+                CameraTargetBounds(
+              _limitesElSalvador,
+            ),
 
-              // ====================================
-              // ADMIN2
-              // ====================================
+            minMaxZoomPreference:
+                const MinMaxZoomPreference(
+              _zoomMinimo,
+              _zoomMaximo,
+            ),
 
-              if (zoomActual >= 9.5)
-                PolygonLayer(
-                  polygons:
-                      admin2Poligonos,
-                ),
+            rotateGesturesEnabled:
+                false,
 
-              // ====================================
-              // ADMIN1
-              // ====================================
+            tiltGesturesEnabled:
+                false,
 
-              PolygonLayer(
-                polygons:
-                    admin1Poligonos,
-              ),
+            compassEnabled:
+                false,
 
-              // ====================================
-              // ADMIN0
-              // SIEMPRE ENCIMA
-              // ====================================
+            myLocationEnabled:
+                false,
 
-              PolygonLayer(
-                polygons:
-                    admin0Poligonos,
-              ),
+            onMapCreated:
+                _onMapCreated,
 
-              // ====================================
-              // NOMBRES ADMIN1
-              // ====================================
+            onStyleLoadedCallback:
+                _onStyleLoaded,
 
-              if (zoomActual >= 8.0 &&
-                  zoomActual < 11.5)
-                MarkerLayer(
-                  markers:
-                      admin1Etiquetas
-                          .map(
-                    (etiqueta) {
-                      return Marker(
-                        point:
-                            etiqueta.posicion,
-
-                        width:
-                            120,
-
-                        height:
-                            42,
-
-                        child:
-                            IgnorePointer(
-                          child:
-                              Center(
-                            child:
-                                Text(
-                              etiqueta.nombre,
-
-                              textAlign:
-                                  TextAlign.center,
-
-                              maxLines:
-                                  2,
-
-                              overflow:
-                                  TextOverflow.ellipsis,
-
-                              style:
-                                  TextStyle(
-                                color:
-                                    colorTexto,
-
-                                fontSize:
-                                    11,
-
-                                fontWeight:
-                                    FontWeight.bold,
-
-                                shadows:
-                                    [
-                                  Shadow(
-                                    color:
-                                        esOscuro
-                                            ? Colors.black
-                                            : Colors.white,
-
-                                    blurRadius:
-                                        4,
-                                  ),
-
-                                  Shadow(
-                                    color:
-                                        esOscuro
-                                            ? Colors.black
-                                            : Colors.white,
-
-                                    blurRadius:
-                                        4,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ).toList(),
-                ),
-
-              // ====================================
-              // NOMBRES ADMIN2
-              // ====================================
-
-              if (zoomActual >= 11.5 &&
-                  zoomActual < 14.0)
-                MarkerLayer(
-                  markers:
-                      admin2Etiquetas
-                          .map(
-                    (etiqueta) {
-                      return Marker(
-                        point:
-                            etiqueta.posicion,
-
-                        width:
-                            100,
-
-                        height:
-                            35,
-
-                        child:
-                            IgnorePointer(
-                          child:
-                              Center(
-                            child:
-                                Text(
-                              etiqueta.nombre,
-
-                              textAlign:
-                                  TextAlign.center,
-
-                              maxLines:
-                                  2,
-
-                              overflow:
-                                  TextOverflow.ellipsis,
-
-                              style:
-                                  TextStyle(
-                                color:
-                                    colorTexto,
-
-                                fontSize:
-                                    9,
-
-                                fontWeight:
-                                    FontWeight.w600,
-
-                                shadows:
-                                    [
-                                  Shadow(
-                                    color:
-                                        esOscuro
-                                            ? Colors.black
-                                            : Colors.white,
-
-                                    blurRadius:
-                                        3,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ).toList(),
-                ),
-
-              // ====================================
-              // NOMBRES ADMIN3
-              // FUTURO
-              // ====================================
-
-              if (zoomActual >= 14.0 &&
-                  admin3Etiquetas.isNotEmpty)
-                MarkerLayer(
-                  markers:
-                      admin3Etiquetas
-                          .map(
-                    (etiqueta) {
-                      return Marker(
-                        point:
-                            etiqueta.posicion,
-
-                        width:
-                            90,
-
-                        height:
-                            30,
-
-                        child:
-                            IgnorePointer(
-                          child:
-                              Center(
-                            child:
-                                Text(
-                              etiqueta.nombre,
-
-                              textAlign:
-                                  TextAlign.center,
-
-                              style:
-                                  TextStyle(
-                                color:
-                                    colorTexto,
-
-                                fontSize:
-                                    8,
-
-                                fontWeight:
-                                    FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ).toList(),
-                ),
-            ],
+            onCameraMove:
+                (
+              position,
+            ) {
+              if ((position.zoom -
+                          _zoomActual)
+                      .abs() >
+                  0.05) {
+                setState(() {
+                  _zoomActual =
+                      position.zoom;
+                });
+              }
+            },
           ),
 
-          // ========================================
+          // ====================================================
+          // CARGANDO
+          // ====================================================
+
+          if (!_estiloCargado ||
+              !_geoJsonCargado)
+            Container(
+              color:
+                  fondo.withValues(
+                alpha:
+                    0.80,
+              ),
+              alignment:
+                  Alignment.center,
+              child:
+                  const CircularProgressIndicator(
+                color:
+                    _naranjaPrincipal,
+              ),
+            ),
+
+          // ====================================================
           // CABECERA
-          // ========================================
+          // ====================================================
 
           SafeArea(
-            child: Padding(
+            child:
+                Padding(
               padding:
-                  const EdgeInsets.all(
+                  const EdgeInsets.fromLTRB(
+                12,
+                12,
+                80,
                 12,
               ),
 
-              child: Container(
-                height: 52,
+              child:
+                  Container(
+                height:
+                    52,
+
+                constraints:
+                    const BoxConstraints(
+                  maxWidth:
+                      430,
+                ),
 
                 padding:
                     const EdgeInsets.symmetric(
-                  horizontal: 16,
+                  horizontal:
+                      15,
                 ),
 
                 decoration:
                     BoxDecoration(
                   color:
-                      esOscuro
-                          ? moradoOscuro.withValues(
-                              alpha: 0.94,
-                            )
-                          : Colors.white.withValues(
-                              alpha: 0.95,
-                            ),
+                      panel.withValues(
+                    alpha:
+                        0.95,
+                  ),
 
                   borderRadius:
                       BorderRadius.circular(
                     18,
                   ),
 
-                  boxShadow: [
+                  boxShadow:
+                      [
                     BoxShadow(
-                      blurRadius: 12,
-
                       color:
-                          Colors.black.withValues(
-                        alpha: 0.12,
+                          Colors.black
+                              .withValues(
+                        alpha:
+                            oscuro
+                                ? 0.35
+                                : 0.14,
                       ),
+                      blurRadius:
+                          10,
                     ),
                   ],
                 ),
 
-                child: Row(
+                child:
+                    Row(
                   children: [
                     const Icon(
-                      Icons.map,
+                      Icons
+                          .map_outlined,
                       color:
-                          naranjaPrincipal,
+                          _naranjaPrincipal,
                     ),
 
                     const SizedBox(
-                      width: 10,
+                      width:
+                          9,
                     ),
 
                     Expanded(
-                      child: Text(
+                      child:
+                          Text(
                         'Mapa de El Salvador',
 
                         style:
                             TextStyle(
                           color:
-                              colorTexto,
-
+                              texto,
                           fontWeight:
                               FontWeight.bold,
-
                           fontSize:
-                              17,
-                        ),
-                      ),
-                    ),
-
-                    Container(
-                      padding:
-                          const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 5,
-                      ),
-
-                      decoration:
-                          BoxDecoration(
-                        color:
-                            naranjaPrincipal.withValues(
-                          alpha: 0.12,
-                        ),
-
-                        borderRadius:
-                            BorderRadius.circular(
-                          10,
-                        ),
-                      ),
-
-                      child:
-                          Text(
-                        'Z ${zoomActual.toStringAsFixed(1)}',
-
-                        style:
-                            const TextStyle(
-                          color:
-                              naranjaPrincipal,
-
-                          fontWeight:
-                              FontWeight.bold,
-
-                          fontSize:
-                              11,
+                              16,
                         ),
                       ),
                     ),
@@ -1320,132 +880,204 @@ class _MapaScreenState extends State<MapaScreen> {
             ),
           ),
 
-          // ========================================
-          // BOTÓN CENTRAR
-          // ========================================
+          // ====================================================
+          // CONTROLES
+          // ====================================================
 
           Positioned(
-            right: 16,
-            bottom: 25,
+            right:
+                15,
+
+            top:
+                MediaQuery.of(
+                      context,
+                    ).padding.top +
+                    12,
 
             child:
-                FloatingActionButton(
-              heroTag:
-                  'centrarMapa',
-
-              backgroundColor:
-                  naranjaPrincipal,
-
-              foregroundColor:
-                  Colors.white,
-
-              onPressed:
-                  centrarElSalvador,
-
-              child:
-                  const Icon(
-                Icons
-                    .center_focus_strong,
-              ),
-            ),
-          ),
-
-          // ========================================
-          // NIVEL ADMINISTRATIVO
-          // ========================================
-
-          Positioned(
-            left: 16,
-            bottom: 25,
-
-            child:
-                Container(
-              padding:
-                  const EdgeInsets.symmetric(
-                horizontal: 13,
-                vertical: 9,
-              ),
-
-              decoration:
-                  BoxDecoration(
-                color:
-                    esOscuro
-                        ? moradoOscuro.withValues(
-                            alpha: 0.94,
-                          )
-                        : Colors.white.withValues(
-                            alpha: 0.95,
-                          ),
-
-                borderRadius:
-                    BorderRadius.circular(
-                  14,
+                Column(
+              children: [
+                _boton(
+                  tag:
+                      'zoomMas',
+                  icon:
+                      Icons.add,
+                  onPressed:
+                      _acercar,
+                  oscuro:
+                      oscuro,
                 ),
 
-                boxShadow: [
-                  BoxShadow(
-                    color:
-                        Colors.black.withValues(
-                      alpha: 0.12,
-                    ),
+                const SizedBox(
+                  height:
+                      10,
+                ),
 
-                    blurRadius:
-                        10,
-                  ),
-                ],
-              ),
+                _boton(
+                  tag:
+                      'zoomMenos',
+                  icon:
+                      Icons.remove,
+                  onPressed:
+                      _alejar,
+                  oscuro:
+                      oscuro,
+                ),
+
+                const SizedBox(
+                  height:
+                      10,
+                ),
+
+                _boton(
+                  tag:
+                      'centrar',
+                  icon:
+                      Icons
+                          .center_focus_strong,
+                  onPressed:
+                      _centrarElSalvador,
+                  oscuro:
+                      oscuro,
+                ),
+              ],
+            ),
+          ),
+
+          // ====================================================
+          // NIVEL
+          // ====================================================
+
+          Positioned(
+            left:
+                15,
+            bottom:
+                25,
+
+            child:
+                SafeArea(
+              top:
+                  false,
 
               child:
-                  Row(
-                mainAxisSize:
-                    MainAxisSize.min,
+                  Container(
+                padding:
+                    const EdgeInsets.symmetric(
+                  horizontal:
+                      14,
+                  vertical:
+                      9,
+                ),
 
-                children: [
-                  const Icon(
-                    Icons.layers_outlined,
-
-                    size: 18,
-
-                    color:
-                        naranjaPrincipal,
+                decoration:
+                    BoxDecoration(
+                  color:
+                      panel.withValues(
+                    alpha:
+                        0.95,
                   ),
 
-                  const SizedBox(
-                    width: 6,
+                  borderRadius:
+                      BorderRadius.circular(
+                    20,
                   ),
 
-                  Text(
-                    obtenerNivelActual(),
-
-                    style:
-                        TextStyle(
+                  boxShadow:
+                      [
+                    BoxShadow(
                       color:
-                          colorTexto,
-
-                      fontWeight:
-                          FontWeight.bold,
+                          Colors.black
+                              .withValues(
+                        alpha:
+                            oscuro
+                                ? 0.35
+                                : 0.14,
+                      ),
+                      blurRadius:
+                          10,
                     ),
-                  ),
-                ],
+                  ],
+                ),
+
+                child:
+                    Row(
+                  mainAxisSize:
+                      MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons
+                          .layers_outlined,
+                      color:
+                          _naranjaPrincipal,
+                      size:
+                          18,
+                    ),
+
+                    const SizedBox(
+                      width:
+                          6,
+                    ),
+
+                    Text(
+                      '${_nivelActual()} · Zoom ${_zoomActual.toStringAsFixed(1)}',
+
+                      style:
+                          TextStyle(
+                        color:
+                            texto,
+                        fontWeight:
+                            FontWeight.bold,
+                        fontSize:
+                            12,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
+
+          // ====================================================
+          // ERROR
+          // ====================================================
+
+          if (_error !=
+              null)
+            Center(
+              child:
+                  Container(
+                margin:
+                    const EdgeInsets.all(
+                  25,
+                ),
+                padding:
+                    const EdgeInsets.all(
+                  20,
+                ),
+                decoration:
+                    BoxDecoration(
+                  color:
+                      panel,
+                  borderRadius:
+                      BorderRadius.circular(
+                    18,
+                  ),
+                ),
+                child:
+                    Text(
+                  _error!,
+                  textAlign:
+                      TextAlign.center,
+                  style:
+                      TextStyle(
+                    color:
+                        texto,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
-}
-
-// ============================================
-// ETIQUETA DEL MAPA
-// ============================================
-
-class _EtiquetaMapa {
-  final String nombre;
-  final LatLng posicion;
-
-  const _EtiquetaMapa({
-    required this.nombre,
-    required this.posicion,
-  });
 }
