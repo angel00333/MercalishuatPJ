@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:mercalishuat/screens/navigation/emprendedor_nav_screen.dart';
 
@@ -31,11 +32,32 @@ class _UsuarioNavScreenState
   void initState() {
     super.initState();
 
+    // ==========================================================
+    // IMPORTANTE
+    //
+    // Estas pantallas se crean UNA SOLA VEZ.
+    //
+    // Al utilizar IndexedStack más abajo:
+    //
+    // - MapaScreen no se destruye.
+    // - conserva zoom.
+    // - conserva rotación.
+    // - conserva inclinación.
+    // - conserva posición.
+    // - conserva GPS activo.
+    // - conserva rutas.
+    // - conserva estado de las demás pantallas.
+    // ==========================================================
+
     paginas = [
       const FeedScreen(),
+
       const ExplorarEmprendimientosScreen(),
+
       const MapaScreen(),
+
       const TiendasUsuarioScreen(),
+
       PerfilScreen(
         themeService: widget.themeService,
       ),
@@ -45,15 +67,46 @@ class _UsuarioNavScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: paginas[indexActual],
+      // ========================================================
+      // PANTALLAS
+      //
+      // ANTES:
+      //
+      // body: paginas[indexActual],
+      //
+      // AHORA:
+      //
+      // IndexedStack mantiene todas las pantallas vivas,
+      // mostrando solamente la seleccionada.
+      // ========================================================
+
+      body: IndexedStack(
+        index: indexActual,
+        children: paginas,
+      ),
+
+      // ========================================================
+      // NAVEGACIÓN INFERIOR
+      // ========================================================
+
       bottomNavigationBar: NavigationBar(
         selectedIndex: indexActual,
+
         onDestinationSelected: (index) {
+          if (index == indexActual) {
+            return;
+          }
+
           setState(() {
             indexActual = index;
           });
         },
+
         destinations: const [
+          // ====================================================
+          // RECIENTES
+          // ====================================================
+
           NavigationDestination(
             icon: Icon(
               Icons.access_time_outlined,
@@ -63,6 +116,11 @@ class _UsuarioNavScreenState
             ),
             label: 'Recientes',
           ),
+
+          // ====================================================
+          // EXPLORAR
+          // ====================================================
+
           NavigationDestination(
             icon: Icon(
               Icons.search_outlined,
@@ -72,6 +130,11 @@ class _UsuarioNavScreenState
             ),
             label: 'Explorar',
           ),
+
+          // ====================================================
+          // MAPA
+          // ====================================================
+
           NavigationDestination(
             icon: Icon(
               Icons.map_outlined,
@@ -81,6 +144,11 @@ class _UsuarioNavScreenState
             ),
             label: 'Mapa',
           ),
+
+          // ====================================================
+          // TIENDAS
+          // ====================================================
+
           NavigationDestination(
             icon: Icon(
               Icons.storefront_outlined,
@@ -90,6 +158,11 @@ class _UsuarioNavScreenState
             ),
             label: 'Tiendas',
           ),
+
+          // ====================================================
+          // PERFIL
+          // ====================================================
+
           NavigationDestination(
             icon: Icon(
               Icons.person_outline,
@@ -104,6 +177,10 @@ class _UsuarioNavScreenState
     );
   }
 }
+
+// ============================================================
+// HOME USUARIO TAB
+// ============================================================
 
 class HomeUsuarioTab extends StatelessWidget {
   final ThemeService themeService;
@@ -120,6 +197,10 @@ class HomeUsuarioTab extends StatelessWidget {
     );
   }
 }
+
+// ============================================================
+// TIENDAS USUARIO
+// ============================================================
 
 class TiendasUsuarioScreen extends StatelessWidget {
   const TiendasUsuarioScreen({

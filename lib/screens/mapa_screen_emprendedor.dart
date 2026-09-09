@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -22,14 +23,17 @@ class MapaScreenEmprendedor extends StatefulWidget {
       _MapaScreenEmprendedorState();
 }
 
-class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
+class _MapaScreenEmprendedorState
+    extends State<MapaScreenEmprendedor>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   // ============================================================
-  // CONTROLADOR
+  // MAPA
   // ============================================================
 
   MapLibreMapController? _mapController;
-
-  Circle? _marcadorUsuario;
 
   // ============================================================
   // EMPRENDIMIENTOS
@@ -44,30 +48,22 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
   static const String _iconoTienda =
       'merc-marker-tienda';
 
-  bool _iconoTiendaCargado =
-      false;
+  bool _iconoTiendaCargado = false;
+  bool _capaEmprendimientosCargada = false;
+  bool _cargandoEmprendimientos = false;
 
-  bool _capaEmprendimientosCargada =
-      false;
-
-  List<Emprendimiento> _emprendimientos =
-      [];
-
-  bool _cargandoEmprendimientos =
-      false;
+  List<Emprendimiento> _emprendimientos = [];
 
   // ============================================================
   // EL SALVADOR
   // ============================================================
 
-  static const LatLng _centroElSalvador =
-      LatLng(
+  static const LatLng _centroElSalvador = LatLng(
     13.7942,
     -88.8965,
   );
 
-  static final LatLngBounds _limitesElSalvador =
-      LatLngBounds(
+  static final LatLngBounds _limitesElSalvador = LatLngBounds(
     southwest: const LatLng(
       13.00,
       -90.25,
@@ -78,14 +74,39 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
     ),
   );
 
-  static const double _zoomMinimo =
-      7.4;
+  static const double _zoomMinimo = 7.4;
+  static const double _zoomMaximo = 19.0;
 
-  static const double _zoomMaximo =
-      19.0;
+  // ============================================================
+  // CÁMARA
+  // ============================================================
 
-  double _zoomActual =
-      8.5;
+  LatLng _centroCamaraActual =
+      _centroElSalvador;
+
+  double _zoomActual = 8.5;
+  double _bearingActual = 0;
+  double _tiltActual = 0;
+
+  bool _primeraCargaEstilo = true;
+
+  bool _moviendoCamaraProgramaticamente =
+      false;
+
+  // ============================================================
+  // ROTACIÓN / BRÚJULA
+  //
+  // La brújula estará visible permanentemente.
+  //
+  // Cuando _rotacionActiva == false:
+  // - no se puede rotar
+  // - no se puede inclinar
+  // - la brújula queda desactivada
+  //
+  // Activar/desactivar NO mueve la cámara.
+  // ============================================================
+
+  bool _rotacionActiva = true;
 
   // ============================================================
   // ESTILOS
@@ -127,27 +148,18 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
   );
 
   // ============================================================
-  // ADMIN
+  // GEOJSON
   // ============================================================
 
   Map<String, dynamic>? _admin0;
-
   Map<String, dynamic>? _admin1;
-
   Map<String, dynamic>? _admin2;
-
   Map<String, dynamic>? _admin3;
-
   Map<String, dynamic>? _mascara;
 
-  bool _geoJsonCargado =
-      false;
-
-  bool _estiloCargado =
-      false;
-
-  bool _capasCargadas =
-      false;
+  bool _geoJsonCargado = false;
+  bool _estiloCargado = false;
+  bool _capasCargadas = false;
 
   String? _error;
 
@@ -157,18 +169,40 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
 
   Position? _posicionUsuario;
 
-  bool _obteniendoUbicacion =
-      false;
+  Circle? _marcadorUsuario;
+
+  LatLng? _puntoGpsVisual;
+
+  StreamSubscription<Position>? _streamPosicion;
+
+  Timer? _timerAnimacionGps;
+
+  bool _obteniendoUbicacion = false;
+
+  bool _actualizacionContinua = false;
+
+  bool _seguirUsuario = false;
+
+  bool _actualizandoMarcadorGps = false;
+
+  DateTime? _ultimaActualizacionCamara;
+
+  static const int _duracionAnimacionGpsMs =
+      450;
+
+  static const int _fpsMarcadorGps =
+      30;
+
+  static const int _intervaloCamaraGpsMs =
+      350;
 
   // ============================================================
   // RUTA
   // ============================================================
 
-  bool _rutaCreada =
-      false;
+  bool _rutaCreada = false;
 
-  bool _calculandoRuta =
-      false;
+  bool _calculandoRuta = false;
 
   Emprendimiento? _destinoActual;
 
@@ -176,8 +210,10 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
 
   double? _duracionRuta;
 
+  Map<String, dynamic>? _geoJsonRutaActual;
+
   // ============================================================
-  // CONTROL DE TAPS EN MÓVIL
+  // CONTROL TAPS
   // ============================================================
 
   bool _abriendoEmprendimiento = false;
@@ -200,13 +236,25 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
   }
 
   // ============================================================
-  // GEOJSON ADMIN
+  // DISPOSE
+  // ============================================================
+
+  @override
+  void dispose() {
+    _streamPosicion?.cancel();
+
+    _timerAnimacionGps?.cancel();
+
+    super.dispose();
+  }
+
+  // ============================================================
+  // CARGAR GEOJSON
   // ============================================================
 
   Future<void> _cargarGeoJson() async {
     try {
-      final textos =
-          await Future.wait(
+      final textos = await Future.wait(
         [
           rootBundle.loadString(
             'assets/mapas/SV-Map-ADM0.geojson',
@@ -223,28 +271,23 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
         ],
       );
 
-      _admin0 =
-          jsonDecode(
+      _admin0 = jsonDecode(
         textos[0],
       );
 
-      _admin1 =
-          jsonDecode(
+      _admin1 = jsonDecode(
         textos[1],
       );
 
-      _admin2 =
-          jsonDecode(
+      _admin2 = jsonDecode(
         textos[2],
       );
 
-      _admin3 =
-          jsonDecode(
+      _admin3 = jsonDecode(
         textos[3],
       );
 
-      _mascara =
-          _crearMascara(
+      _mascara = _crearMascara(
         _admin0!,
       );
 
@@ -253,11 +296,9 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
       }
 
       setState(() {
-        _geoJsonCargado =
-            true;
+        _geoJsonCargado = true;
 
-        _error =
-            null;
+        _error = null;
       });
 
       if (_estiloCargado) {
@@ -286,43 +327,35 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
   Map<String, dynamic> _crearMascara(
     Map<String, dynamic> admin0,
   ) {
-    final List<dynamic> huecos =
-        [];
+    final List<dynamic> huecos = [];
 
     final features =
         admin0['features'];
 
     if (features is List) {
-      for (final feature
-          in features) {
+      for (final feature in features) {
         final geometry =
             feature['geometry'];
 
-        if (geometry ==
-            null) {
+        if (geometry == null) {
           continue;
         }
 
-        final String tipo =
+        final tipo =
             geometry['type']
                     ?.toString() ??
                 '';
 
         final coordinates =
-            geometry[
-                'coordinates'];
+            geometry['coordinates'];
 
-        if (tipo ==
-                'Polygon' &&
-            coordinates
-                is List &&
-            coordinates
-                .isNotEmpty) {
+        if (tipo == 'Polygon' &&
+            coordinates is List &&
+            coordinates.isNotEmpty) {
           final exterior =
               coordinates[0];
 
-          if (exterior
-              is List) {
+          if (exterior is List) {
             huecos.add(
               exterior.reversed
                   .toList(),
@@ -332,19 +365,14 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
 
         if (tipo ==
                 'MultiPolygon' &&
-            coordinates
-                is List) {
+            coordinates is List) {
           for (final polygon
               in coordinates) {
-            if (polygon
-                    is List &&
-                polygon
-                    .isNotEmpty &&
-                polygon[0]
-                    is List) {
+            if (polygon is List &&
+                polygon.isNotEmpty &&
+                polygon[0] is List) {
               huecos.add(
-                (polygon[0]
-                        as List)
+                (polygon[0] as List)
                     .reversed
                     .toList(),
               );
@@ -363,21 +391,14 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
     ];
 
     return {
-      'type':
-          'FeatureCollection',
-
+      'type': 'FeatureCollection',
       'features': [
         {
-          'type':
-              'Feature',
-
+          'type': 'Feature',
           'properties':
               <String, dynamic>{},
-
           'geometry': {
-            'type':
-                'Polygon',
-
+            'type': 'Polygon',
             'coordinates': [
               exterior,
               ...huecos,
@@ -416,61 +437,29 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
 
       if (resultado['success'] ==
           true) {
-        final dynamic raw =
-            resultado[
-                'emprendimientos'];
+        final raw =
+            resultado['emprendimientos'];
 
         if (raw is List) {
-          final lista =
-              raw
-                  .whereType<
-                      Emprendimiento>()
-                  .toList();
+          final lista = raw
+              .whereType<Emprendimiento>()
+              .where(
+                (e) =>
+                    e.latitud != null &&
+                    e.longitud != null,
+              )
+              .toList();
 
           setState(() {
             _emprendimientos =
-                lista.where(
-              (e) =>
-                  e.latitud !=
-                      null &&
-                  e.longitud !=
-                      null,
-            ).toList();
+                lista;
           });
-
-          debugPrint(
-            '================================',
-          );
-
-          debugPrint(
-            'EMPRENDIMIENTOS CON UBICACIÓN: '
-            '${_emprendimientos.length}',
-          );
-
-          for (final tienda
-              in _emprendimientos) {
-            debugPrint(
-              '${tienda.id} - '
-              '${tienda.nombre} - '
-              '${tienda.latitud}, '
-              '${tienda.longitud}',
-            );
-          }
-
-          debugPrint(
-            '================================',
-          );
 
           if (_estiloCargado &&
               _iconoTiendaCargado) {
             await _dibujarEmprendimientos();
           }
         }
-      } else {
-        debugPrint(
-          'Error listando tiendas: '
-          '${resultado['message']}',
-        );
       }
     } catch (e) {
       debugPrint(
@@ -487,7 +476,7 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
   }
 
   // ============================================================
-  // MAPA CREADO
+  // MAP CREATED
   // ============================================================
 
   void _onMapCreated(
@@ -502,7 +491,7 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
   }
 
   // ============================================================
-  // TAP DIRECTO SOBRE EMPRENDIMIENTO
+  // FEATURE TAP
   // ============================================================
 
   void _onFeatureTapped(
@@ -512,21 +501,17 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
     String layerId,
     Annotation? annotation,
   ) {
-    debugPrint(
-      'FEATURE TAP -> id=$id layer=$layerId',
-    );
-
-    if (layerId != _layerEmprendimientos) {
+    if (layerId !=
+        _layerEmprendimientos) {
       return;
     }
 
-    final int? emprendimientoId =
-        int.tryParse(id);
+    final emprendimientoId =
+        int.tryParse(
+      id,
+    );
 
     if (emprendimientoId == null) {
-      debugPrint(
-        'ID inválido recibido desde onFeatureTapped: $id',
-      );
       return;
     }
 
@@ -536,18 +521,15 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
   }
 
   // ============================================================
-  // TAP GENERAL DEL MAPA
-  //
-  // Respaldo para Android/iOS. Si el callback específico de
-  // la capa no dispara, consultamos manualmente qué feature
-  // quedó debajo del dedo.
+  // CLICK MAPA
   // ============================================================
 
   Future<void> _onMapClick(
     Point<double> point,
     LatLng coordinates,
   ) async {
-    final controller = _mapController;
+    final controller =
+        _mapController;
 
     if (controller == null ||
         !_capaEmprendimientosCargada) {
@@ -555,8 +537,9 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
     }
 
     try {
-      final List<dynamic> features =
-          await controller.queryRenderedFeatures(
+      final features =
+          await controller
+              .queryRenderedFeatures(
         point,
         const [
           _layerEmprendimientos,
@@ -564,89 +547,84 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
         null,
       );
 
-      if (features.isEmpty) {
-        return;
-      }
-
-      for (final dynamic rawFeature in features) {
+      for (final rawFeature
+          in features) {
         if (rawFeature is! Map) {
           continue;
         }
 
-        final Map<String, dynamic> feature =
+        final feature =
             Map<String, dynamic>.from(
           rawFeature,
         );
 
         int? emprendimientoId;
 
-        // En la mayoría de plataformas viene como Feature.id.
-        final dynamic rawId =
+        final id =
             feature['id'];
 
-        if (rawId != null) {
+        if (id != null) {
           emprendimientoId =
               int.tryParse(
-            rawId.toString(),
+            id.toString(),
           );
         }
 
-        // Respaldo por si la plataforma devuelve solo properties.
-        if (emprendimientoId == null) {
-          final dynamic rawProperties =
+        if (emprendimientoId ==
+            null) {
+          final propiedades =
               feature['properties'];
 
-          if (rawProperties is Map) {
-            final properties =
+          if (propiedades is Map) {
+            final p =
                 Map<String, dynamic>.from(
-              rawProperties,
+              propiedades,
             );
 
-            final dynamic rawPropId =
-                properties['emprendimiento_id'];
-
-            if (rawPropId != null) {
-              emprendimientoId =
-                  int.tryParse(
-                rawPropId.toString(),
-              );
-            }
+            emprendimientoId =
+                int.tryParse(
+              p['emprendimiento_id']
+                      ?.toString() ??
+                  '',
+            );
           }
         }
 
-        if (emprendimientoId != null) {
+        if (emprendimientoId !=
+            null) {
           await _abrirEmprendimientoPorId(
             emprendimientoId,
           );
+
           return;
         }
       }
     } catch (e) {
       debugPrint(
-        'ERROR TAP RESPALDO MAPA: $e',
+        'ERROR TAP MAPA: $e',
       );
     }
   }
 
   // ============================================================
   // ABRIR EMPRENDIMIENTO
-  //
-  // Evita que onFeatureTapped + onMapClick abran dos veces
-  // el mismo BottomSheet.
   // ============================================================
 
-  Future<void> _abrirEmprendimientoPorId(
+  Future<void>
+      _abrirEmprendimientoPorId(
     int id,
   ) async {
     if (!mounted) {
       return;
     }
 
-    final DateTime ahora =
+    final ahora =
         DateTime.now();
 
-    if (_ultimoEmprendimientoTocado == id &&
-        _ultimoTapEmprendimiento != null &&
+    if (_ultimoEmprendimientoTocado ==
+            id &&
+        _ultimoTapEmprendimiento !=
+            null &&
         ahora
                 .difference(
                   _ultimoTapEmprendimiento!,
@@ -662,93 +640,174 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
 
     Emprendimiento? seleccionado;
 
-    for (final tienda in _emprendimientos) {
+    for (final tienda
+        in _emprendimientos) {
       if (tienda.id == id) {
         seleccionado = tienda;
+
         break;
       }
     }
 
     if (seleccionado == null) {
-      debugPrint(
-        'NO SE ENCONTRÓ EMPRENDIMIENTO ID $id',
-      );
       return;
     }
 
-    _ultimoEmprendimientoTocado = id;
-    _ultimoTapEmprendimiento = ahora;
-    _abriendoEmprendimiento = true;
+    _ultimoEmprendimientoTocado =
+        id;
 
-    debugPrint(
-      'TIENDA SELECCIONADA: ${seleccionado.nombre}',
-    );
+    _ultimoTapEmprendimiento =
+        ahora;
+
+    _abriendoEmprendimiento =
+        true;
 
     try {
       await _mostrarOpcionesEmprendimiento(
         seleccionado,
       );
     } finally {
-      _abriendoEmprendimiento = false;
+      _abriendoEmprendimiento =
+          false;
     }
   }
 
   // ============================================================
-  // ESTILO CARGADO
+  // STYLE LOADED
   // ============================================================
 
   Future<void>
       _onStyleLoaded() async {
-    _capasCargadas =
-        false;
+    _capasCargadas = false;
 
-    _rutaCreada =
-        false;
+    _marcadorUsuario = null;
 
-    _marcadorUsuario =
-        null;
-
-    _iconoTiendaCargado =
-        false;
+    _iconoTiendaCargado = false;
 
     _capaEmprendimientosCargada =
         false;
+
+    _rutaCreada = false;
 
     if (!mounted) {
       return;
     }
 
     setState(() {
-      _estiloCargado =
-          true;
+      _estiloCargado = true;
     });
 
     if (_geoJsonCargado) {
       await _agregarCapas();
     }
 
-    // Primero cargamos el icono.
     await _cargarIconoTienda();
 
-    // Luego las tiendas.
     await _dibujarEmprendimientos();
 
-    if (_posicionUsuario !=
-        null) {
-      await _dibujarUbicacion(
-        _posicionUsuario!,
-        centrar: false,
+    // ==========================================================
+    // RESTAURAR RUTA
+    // ==========================================================
+
+    if (_geoJsonRutaActual != null) {
+      await _dibujarRuta(
+        _geoJsonRutaActual!,
       );
     }
 
-    await _centrarElSalvador();
+    // ==========================================================
+    // RESTAURAR GPS
+    // ==========================================================
+
+    if (_puntoGpsVisual != null) {
+      await _actualizarMarcadorGps(
+        _puntoGpsVisual!,
+      );
+    } else if (_posicionUsuario !=
+        null) {
+      final punto =
+          LatLng(
+        _posicionUsuario!.latitude,
+        _posicionUsuario!.longitude,
+      );
+
+      _puntoGpsVisual =
+          punto;
+
+      await _actualizarMarcadorGps(
+        punto,
+      );
+    }
+
+    if (_primeraCargaEstilo) {
+      _primeraCargaEstilo =
+          false;
+    } else {
+      await _restaurarCamara();
+    }
   }
 
   // ============================================================
-  // CARGAR ICONO TIENDA
-  //
-  // REDIMENSIONAMOS EL PNG ANTES DE ENTREGARLO A MAPLIBRE.
-  // ESTO CORRIGE EL MARCADOR INVISIBLE EN WEB.
+  // ANIMAR CÁMARA
+  // ============================================================
+
+  Future<void> _animarCamara(
+    CameraUpdate update,
+  ) async {
+    final controller =
+        _mapController;
+
+    if (controller == null) {
+      return;
+    }
+
+    _moviendoCamaraProgramaticamente =
+        true;
+
+    try {
+      await controller.animateCamera(
+        update,
+      );
+
+      await Future<void>.delayed(
+        const Duration(
+          milliseconds: 70,
+        ),
+      );
+    } catch (e) {
+      debugPrint(
+        'ERROR MOVIENDO CÁMARA: $e',
+      );
+    } finally {
+      _moviendoCamaraProgramaticamente =
+          false;
+    }
+  }
+
+  // ============================================================
+  // RESTAURAR CÁMARA
+  // ============================================================
+
+  Future<void>
+      _restaurarCamara() async {
+    await _animarCamara(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target:
+              _centroCamaraActual,
+          zoom:
+              _zoomActual,
+          bearing:
+              _bearingActual,
+          tilt:
+              _tiltActual,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // ICONO TIENDA
   // ============================================================
 
   Future<void>
@@ -756,43 +815,26 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
     final controller =
         _mapController;
 
-    if (controller ==
-            null ||
+    if (controller == null ||
         _iconoTiendaCargado) {
       return;
     }
 
     ui.Codec? codec;
+
     ui.Image? imagen;
 
     try {
-      // ========================================================
-      // PNG ORIGINAL
-      // ========================================================
-
       final ByteData data =
           await rootBundle.load(
         'assets/mapas/marcador_tienda.png',
       );
 
-      final Uint8List
-          bytesOriginales =
+      final Uint8List bytesOriginales =
           data.buffer.asUint8List(
         data.offsetInBytes,
         data.lengthInBytes,
       );
-
-      debugPrint(
-        'Marcador original: '
-        '${bytesOriginales.length} bytes',
-      );
-
-      // ========================================================
-      // REDIMENSIONAR
-      //
-      // Dejamos el marcador en 96px de ancho.
-      // La altura se calcula automáticamente.
-      // ========================================================
 
       codec =
           await ui.instantiateImageCodec(
@@ -801,43 +843,27 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
             96,
       );
 
-      final ui.FrameInfo frame =
+      final frame =
           await codec.getNextFrame();
 
       imagen =
           frame.image;
 
-      debugPrint(
-        'Marcador redimensionado: '
-        '${imagen.width}x${imagen.height}',
-      );
-
-      // ========================================================
-      // CONVERTIR A PNG
-      // ========================================================
-
-      final ByteData? pngData =
+      final pngData =
           await imagen.toByteData(
         format:
             ui.ImageByteFormat.png,
       );
 
-      if (pngData ==
-          null) {
-        throw Exception(
-          'No se pudo convertir el marcador a PNG',
-        );
+      if (pngData == null) {
+        return;
       }
 
-      final Uint8List bytesFinales =
+      final bytesFinales =
           pngData.buffer.asUint8List(
         pngData.offsetInBytes,
         pngData.lengthInBytes,
       );
-
-      // ========================================================
-      // REGISTRAR EN MAPLIBRE
-      // ========================================================
 
       await controller.addImage(
         _iconoTienda,
@@ -846,23 +872,10 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
 
       _iconoTiendaCargado =
           true;
-
-      debugPrint(
-        '✓ ICONO TIENDA REGISTRADO EN MAPLIBRE',
-      );
     } catch (e) {
-      _iconoTiendaCargado =
-          false;
-
       debugPrint(
         'ERROR ICONO TIENDA: $e',
       );
-
-      if (mounted) {
-        _mostrarMensaje(
-          'No se pudo cargar el marcador de las tiendas',
-        );
-      }
     } finally {
       imagen?.dispose();
 
@@ -878,8 +891,7 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
     final controller =
         _mapController;
 
-    if (controller ==
-            null ||
+    if (controller == null ||
         _capasCargadas ||
         !_geoJsonCargado) {
       return;
@@ -916,10 +928,6 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
         _admin3!,
       );
 
-      // ========================================================
-      // MÁSCARA
-      // ========================================================
-
       await controller.addFillLayer(
         'merc-mask',
         'merc-mask-layer',
@@ -928,10 +936,8 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
               oscuro
                   ? '#171320'
                   : '#FFF6ED',
-
           fillOpacity:
-              1.0,
-
+              1,
           fillOutlineColor:
               oscuro
                   ? '#171320'
@@ -939,25 +945,16 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
         ),
       );
 
-      // ========================================================
-      // TINTE
-      // ========================================================
-
       await controller.addFillLayer(
         'merc-admin0',
         'merc-orange-overlay',
         const FillLayerProperties(
           fillColor:
               '#FF7E01',
-
           fillOpacity:
               0.035,
         ),
       );
-
-      // ========================================================
-      // ADMIN3
-      // ========================================================
 
       await controller.addLineLayer(
         'merc-admin3',
@@ -965,10 +962,8 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
         const LineLayerProperties(
           lineColor:
               '#FFC078',
-
           lineOpacity:
               0.65,
-
           lineWidth:
               0.65,
         ),
@@ -976,20 +971,14 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
             13,
       );
 
-      // ========================================================
-      // ADMIN2
-      // ========================================================
-
       await controller.addLineLayer(
         'merc-admin2',
         'merc-admin2-line',
         const LineLayerProperties(
           lineColor:
               '#FF9A3D',
-
           lineOpacity:
               0.78,
-
           lineWidth:
               1,
         ),
@@ -997,20 +986,14 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
             10,
       );
 
-      // ========================================================
-      // ADMIN1
-      // ========================================================
-
       await controller.addLineLayer(
         'merc-admin1',
         'merc-admin1-line',
         const LineLayerProperties(
           lineColor:
               '#FF7E01',
-
           lineOpacity:
               0.9,
-
           lineWidth:
               1.5,
         ),
@@ -1018,20 +1001,14 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
             7.5,
       );
 
-      // ========================================================
-      // ADMIN0
-      // ========================================================
-
       await controller.addLineLayer(
         'merc-admin0',
         'merc-admin0-line',
         const LineLayerProperties(
           lineColor:
               '#C95400',
-
           lineOpacity:
               1,
-
           lineWidth:
               3,
         ),
@@ -1055,8 +1032,7 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
     final controller =
         _mapController;
 
-    if (controller ==
-            null ||
+    if (controller == null ||
         !_estiloCargado ||
         !_iconoTiendaCargado) {
       return;
@@ -1068,11 +1044,9 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
 
       for (final emprendimiento
           in _emprendimientos) {
-        if (emprendimiento
-                    .latitud ==
+        if (emprendimiento.latitud ==
                 null ||
-            emprendimiento
-                    .longitud ==
+            emprendimiento.longitud ==
                 null) {
           continue;
         }
@@ -1080,57 +1054,35 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
         features.add({
           'type':
               'Feature',
-
-          // Este ID es el que devuelve
-          // onFeatureTapped.
           'id':
               emprendimiento.id
                   .toString(),
-
           'properties': {
             'tipo':
                 'emprendimiento',
-
             'nombre':
-                emprendimiento
-                    .nombre,
-
+                emprendimiento.nombre,
             'emprendimiento_id':
-                emprendimiento
-                    .id,
+                emprendimiento.id,
           },
-
           'geometry': {
             'type':
                 'Point',
-
             'coordinates': [
-              emprendimiento
-                  .longitud!,
-              emprendimiento
-                  .latitud!,
+              emprendimiento.longitud!,
+              emprendimiento.latitud!,
             ],
           },
         });
       }
 
-      final Map<String, dynamic>
-          geojson = {
+      final geojson =
+          <String, dynamic>{
         'type':
             'FeatureCollection',
-
         'features':
             features,
       };
-
-      debugPrint(
-        'FEATURES EMPRENDIMIENTOS: '
-        '${features.length}',
-      );
-
-      // ========================================================
-      // SI YA EXISTE, ACTUALIZAR
-      // ========================================================
 
       if (_capaEmprendimientosCargada) {
         await controller
@@ -1139,74 +1091,39 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
           geojson,
         );
 
-        debugPrint(
-          '✓ SOURCE TIENDAS ACTUALIZADO',
-        );
-
         return;
       }
 
-      // ========================================================
-      // SOURCE
-      // ========================================================
-
-      await controller
-          .addGeoJsonSource(
+      await controller.addGeoJsonSource(
         _sourceEmprendimientos,
         geojson,
       );
 
-      // ========================================================
-      // SYMBOL LAYER
-      // ========================================================
-
-      await controller
-          .addSymbolLayer(
+      await controller.addSymbolLayer(
         _sourceEmprendimientos,
         _layerEmprendimientos,
         const SymbolLayerProperties(
           iconImage:
               _iconoTienda,
-
-          // El PNG ya está reducido
-          // a 96px.
-          //
-          // 0.85 deja un tamaño claro
-          // y visible.
           iconSize:
               0.85,
-
-          // La punta inferior del pin
-          // coincide con la coordenada.
           iconAnchor:
               'bottom',
-
-          // Nunca ocultar el marcador
-          // por colisiones con textos.
           iconAllowOverlap:
               true,
-
           iconIgnorePlacement:
               true,
-
           iconOptional:
               false,
-
           iconOpacity:
-              1.0,
+              1,
         ),
-
-        // Necesario para recibir taps.
         enableInteraction:
             true,
       );
 
       _capaEmprendimientosCargada =
           true;
-
-      debugPrint(
-        '✓ CAPA EMPRENDIMIENTOS CREADA',
-      );
     } catch (e) {
       debugPrint(
         'ERROR DIBUJANDO TIENDAS: $e',
@@ -1215,10 +1132,11 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
   }
 
   // ============================================================
-  // OPCIONES DEL EMPRENDIMIENTO
+  // OPCIONES EMPRENDIMIENTO
   // ============================================================
 
-  Future<void> _mostrarOpcionesEmprendimiento(
+  Future<void>
+      _mostrarOpcionesEmprendimiento(
     Emprendimiento emprendimiento,
   ) async {
     if (!mounted) {
@@ -1228,13 +1146,10 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
     await showModalBottomSheet(
       context:
           context,
-
       showDragHandle:
           true,
-
       isScrollControlled:
           true,
-
       builder:
           (bottomContext) {
         return SafeArea(
@@ -1246,39 +1161,29 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
               20,
               24,
             ),
-
             child: Column(
               mainAxisSize:
                   MainAxisSize.min,
-
               crossAxisAlignment:
-                  CrossAxisAlignment
-                      .stretch,
-
+                  CrossAxisAlignment.stretch,
               children: [
                 Row(
                   children: [
                     Container(
                       width:
                           64,
-
                       height:
                           64,
-
                       decoration:
                           BoxDecoration(
                         color:
                             _naranjaPrincipal,
-
                         borderRadius:
-                            BorderRadius
-                                .circular(
+                            BorderRadius.circular(
                           18,
                         ),
-
                         image:
-                            emprendimiento
-                                            .imagenUrl !=
+                            emprendimiento.imagenUrl !=
                                         null &&
                                     emprendimiento
                                         .imagenUrl!
@@ -1294,10 +1199,8 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                                   )
                                 : null,
                       ),
-
                       child:
-                          emprendimiento
-                                          .imagenUrl ==
+                          emprendimiento.imagenUrl ==
                                       null ||
                                   emprendimiento
                                       .imagenUrl!
@@ -1320,26 +1223,20 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                     Expanded(
                       child: Column(
                         crossAxisAlignment:
-                            CrossAxisAlignment
-                                .start,
-
+                            CrossAxisAlignment.start,
                         children: [
                           Text(
-                            emprendimiento
-                                .nombre,
-
+                            emprendimiento.nombre,
                             style:
                                 const TextStyle(
                               fontSize:
                                   19,
-
                               fontWeight:
                                   FontWeight.bold,
                             ),
                           ),
 
-                          if (emprendimiento
-                                      .descripcion !=
+                          if (emprendimiento.descripcion !=
                                   null &&
                               emprendimiento
                                   .descripcion!
@@ -1348,17 +1245,13 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                               height:
                                   4,
                             ),
-
                             Text(
                               emprendimiento
                                   .descripcion!,
-
                               maxLines:
                                   2,
-
                               overflow:
-                                  TextOverflow
-                                      .ellipsis,
+                                  TextOverflow.ellipsis,
                             ),
                           ],
 
@@ -1376,23 +1269,18 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                                 size:
                                     16,
                               ),
-
                               SizedBox(
                                 width:
                                     4,
                               ),
-
                               Text(
                                 'Ubicación disponible',
-
                                 style:
                                     TextStyle(
                                   color:
                                       _naranjaPrincipal,
-
                                   fontSize:
                                       12,
-
                                   fontWeight:
                                       FontWeight.w600,
                                 ),
@@ -1410,14 +1298,9 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                       24,
                 ),
 
-                // =================================================
-                // PERFIL
-                // =================================================
-
                 SizedBox(
                   height:
                       50,
-
                   child:
                       OutlinedButton.icon(
                     onPressed:
@@ -1430,13 +1313,10 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                         emprendimiento,
                       );
                     },
-
                     icon:
                         const Icon(
-                      Icons
-                          .storefront_outlined,
+                      Icons.storefront_outlined,
                     ),
-
                     label:
                         const Text(
                       'Ver perfil del emprendimiento',
@@ -1449,26 +1329,18 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                       12,
                 ),
 
-                // =================================================
-                // RUTA
-                // =================================================
-
                 SizedBox(
                   height:
                       50,
-
                   child:
                       FilledButton.icon(
                     style:
-                        FilledButton
-                            .styleFrom(
+                        FilledButton.styleFrom(
                       backgroundColor:
                           _verdeRuta,
-
                       foregroundColor:
                           Colors.white,
                     ),
-
                     onPressed:
                         () {
                       Navigator.pop(
@@ -1479,12 +1351,10 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                         emprendimiento,
                       );
                     },
-
                     icon:
                         const Icon(
                       Icons.route,
                     ),
-
                     label:
                         const Text(
                       'Marcar ruta',
@@ -1509,13 +1379,10 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
     showModalBottomSheet(
       context:
           context,
-
       showDragHandle:
           true,
-
       isScrollControlled:
           true,
-
       builder:
           (perfilContext) {
         return SafeArea(
@@ -1525,46 +1392,36 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                 const EdgeInsets.all(
               24,
             ),
-
             child: Column(
               mainAxisSize:
                   MainAxisSize.min,
-
               children: [
                 CircleAvatar(
                   radius:
                       52,
-
                   backgroundColor:
                       _naranjaPrincipal,
-
                   backgroundImage:
-                      emprendimiento
-                                  .imagenUrl !=
-                              null &&
-                          emprendimiento
-                              .imagenUrl!
-                              .isNotEmpty
+                      emprendimiento.imagenUrl !=
+                                  null &&
+                              emprendimiento
+                                  .imagenUrl!
+                                  .isNotEmpty
                           ? NetworkImage(
                               emprendimiento
                                   .imagenUrl!,
                             )
                           : null,
-
                   child:
-                      emprendimiento
-                                  .imagenUrl ==
-                              null ||
-                          emprendimiento
-                              .imagenUrl!
-                              .isEmpty
+                      emprendimiento.imagenUrl ==
+                                  null ||
+                              emprendimiento
+                                  .imagenUrl!
+                                  .isEmpty
                           ? const Icon(
-                              Icons
-                                  .storefront,
-
+                              Icons.storefront,
                               size:
                                   50,
-
                               color:
                                   Colors.white,
                             )
@@ -1578,22 +1435,18 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
 
                 Text(
                   emprendimiento.nombre,
-
                   textAlign:
                       TextAlign.center,
-
                   style:
                       const TextStyle(
                     fontSize:
                         22,
-
                     fontWeight:
                         FontWeight.bold,
                   ),
                 ),
 
-                if (emprendimiento
-                            .descripcion !=
+                if (emprendimiento.descripcion !=
                         null &&
                     emprendimiento
                         .descripcion!
@@ -1602,18 +1455,15 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                     height:
                         12,
                   ),
-
                   Text(
                     emprendimiento
                         .descripcion!,
-
                     textAlign:
                         TextAlign.center,
                   ),
                 ],
 
-                if (emprendimiento
-                            .telefono !=
+                if (emprendimiento.telefono !=
                         null &&
                     emprendimiento
                         .telefono!
@@ -1622,32 +1472,25 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                     height:
                         15,
                   ),
-
                   ListTile(
                     leading:
                         const Icon(
-                      Icons
-                          .phone_outlined,
-
+                      Icons.phone_outlined,
                       color:
                           _naranjaPrincipal,
                     ),
-
                     title:
                         const Text(
                       'Teléfono',
                     ),
-
                     subtitle:
                         Text(
-                      emprendimiento
-                          .telefono!,
+                      emprendimiento.telefono!,
                     ),
                   ),
                 ],
 
-                if (emprendimiento
-                            .correoContacto !=
+                if (emprendimiento.correoContacto !=
                         null &&
                     emprendimiento
                         .correoContacto!
@@ -1655,18 +1498,14 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                   ListTile(
                     leading:
                         const Icon(
-                      Icons
-                          .email_outlined,
-
+                      Icons.email_outlined,
                       color:
                           _naranjaPrincipal,
                     ),
-
                     title:
                         const Text(
                       'Correo de contacto',
                     ),
-
                     subtitle:
                         Text(
                       emprendimiento
@@ -1682,22 +1521,17 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                 SizedBox(
                   width:
                       double.infinity,
-
                   height:
                       50,
-
                   child:
                       FilledButton.icon(
                     style:
-                        FilledButton
-                            .styleFrom(
+                        FilledButton.styleFrom(
                       backgroundColor:
                           _verdeRuta,
-
                       foregroundColor:
                           Colors.white,
                     ),
-
                     onPressed:
                         () {
                       Navigator.pop(
@@ -1708,12 +1542,10 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                         emprendimiento,
                       );
                     },
-
                     icon:
                         const Icon(
                       Icons.route,
                     ),
-
                     label:
                         const Text(
                       'Cómo llegar',
@@ -1781,7 +1613,8 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
     const settings =
         LocationSettings(
       accuracy:
-          LocationAccuracy.high,
+          LocationAccuracy
+              .bestForNavigation,
     );
 
     return Geolocator
@@ -1792,12 +1625,54 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
   }
 
   // ============================================================
-  // MI UBICACIÓN
+  // BOTÓN GPS
   // ============================================================
 
   Future<void>
       _obtenerMiUbicacion() async {
     if (_obteniendoUbicacion) {
+      return;
+    }
+
+    if (_actualizacionContinua &&
+        !_seguirUsuario) {
+      final posicion =
+          _posicionUsuario;
+
+      if (posicion != null) {
+        _seguirUsuario =
+            true;
+
+        await _centrarEnUsuario(
+          LatLng(
+            posicion.latitude,
+            posicion.longitude,
+          ),
+          zoom:
+              max(
+            _zoomActual,
+            16,
+          ),
+        );
+
+        if (mounted) {
+          setState(() {});
+        }
+      }
+
+      return;
+    }
+
+    if (_actualizacionContinua &&
+        _seguirUsuario) {
+      await _detenerActualizacionContinua();
+
+      if (mounted) {
+        _mostrarMensaje(
+          'Seguimiento GPS detenido',
+        );
+      }
+
       return;
     }
 
@@ -1810,24 +1685,41 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
       final posicion =
           await _obtenerPosicionParaRuta();
 
-      if (posicion ==
-          null) {
+      if (posicion == null ||
+          !mounted) {
         return;
       }
 
-      if (!mounted) {
-        return;
-      }
+      _posicionUsuario =
+          posicion;
 
-      setState(() {
-        _posicionUsuario =
-            posicion;
-      });
-
-      await _dibujarUbicacion(
-        posicion,
-        centrar: true,
+      final punto =
+          LatLng(
+        posicion.latitude,
+        posicion.longitude,
       );
+
+      _puntoGpsVisual =
+          punto;
+
+      await _actualizarMarcadorGps(
+        punto,
+      );
+
+      _seguirUsuario =
+          true;
+
+      await _centrarEnUsuario(
+        punto,
+        zoom:
+            17,
+      );
+
+      await _iniciarActualizacionContinua();
+
+      if (mounted) {
+        setState(() {});
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -1839,57 +1731,353 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
   }
 
   // ============================================================
-  // DIBUJAR MI UBICACIÓN
+  // CENTRAR EN USUARIO
   // ============================================================
 
-  Future<void> _dibujarUbicacion(
-    Position posicion, {
-    required bool centrar,
+  Future<void> _centrarEnUsuario(
+    LatLng punto, {
+    required double zoom,
   }) async {
-    final controller =
-        _mapController;
+    _centroCamaraActual =
+        punto;
 
-    if (controller ==
-            null ||
+    _zoomActual =
+        zoom
+            .clamp(
+              _zoomMinimo,
+              _zoomMaximo,
+            )
+            .toDouble();
+
+    await _animarCamara(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target:
+              punto,
+          zoom:
+              _zoomActual,
+          bearing:
+              _bearingActual,
+          tilt:
+              _tiltActual,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // GPS CONTINUO
+  // ============================================================
+
+  Future<void>
+      _iniciarActualizacionContinua() async {
+    if (_actualizacionContinua) {
+      return;
+    }
+
+    _actualizacionContinua =
+        true;
+
+    await _iniciarStreamPosicion();
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  // ============================================================
+  // STREAM GPS
+  // ============================================================
+
+  Future<void>
+      _iniciarStreamPosicion() async {
+    final servicio =
+        await Geolocator
+            .isLocationServiceEnabled();
+
+    if (!servicio) {
+      _actualizacionContinua =
+          false;
+
+      if (mounted) {
+        setState(() {});
+
+        _mostrarDialogoGpsDesactivado();
+      }
+
+      return;
+    }
+
+    await _streamPosicion?.cancel();
+
+    const settings =
+        LocationSettings(
+      accuracy:
+          LocationAccuracy
+              .bestForNavigation,
+      distanceFilter:
+          1,
+    );
+
+    _streamPosicion =
+        Geolocator
+            .getPositionStream(
+      locationSettings:
+          settings,
+    ).listen(
+      (Position posicion) async {
+        if (!mounted ||
+            !_actualizacionContinua) {
+          return;
+        }
+
+        if (posicion.accuracy >
+            80) {
+          return;
+        }
+
+        _posicionUsuario =
+            posicion;
+
+        final destino =
+            LatLng(
+          posicion.latitude,
+          posicion.longitude,
+        );
+
+        await _animarGpsHasta(
+          destino,
+        );
+      },
+
+      onError:
+          (error) {
+        debugPrint(
+          'ERROR GPS STREAM: $error',
+        );
+      },
+
+      cancelOnError:
+          false,
+    );
+  }
+
+  // ============================================================
+  // ANIMACIÓN GPS
+  // ============================================================
+
+  Future<void> _animarGpsHasta(
+    LatLng destino,
+  ) async {
+    if (!_actualizacionContinua ||
         !_estiloCargado) {
       return;
     }
 
-    final punto =
-        LatLng(
-      posicion.latitude,
-      posicion.longitude,
+    if (_puntoGpsVisual ==
+        null) {
+      _puntoGpsVisual =
+          destino;
+
+      await _actualizarMarcadorGps(
+        destino,
+      );
+
+      await _actualizarCamaraGps(
+        destino,
+      );
+
+      return;
+    }
+
+    final origen =
+        _puntoGpsVisual!;
+
+    final distancia =
+        Geolocator.distanceBetween(
+      origen.latitude,
+      origen.longitude,
+      destino.latitude,
+      destino.longitude,
     );
+
+    if (distancia <
+        0.5) {
+      _puntoGpsVisual =
+          destino;
+
+      await _actualizarMarcadorGps(
+        destino,
+      );
+
+      await _actualizarCamaraGps(
+        destino,
+      );
+
+      return;
+    }
+
+    _timerAnimacionGps?.cancel();
+
+    const intervaloMs =
+        1000 ~/
+            _fpsMarcadorGps;
+
+    int transcurrido =
+        0;
+
+    _timerAnimacionGps =
+        Timer.periodic(
+      const Duration(
+        milliseconds:
+            intervaloMs,
+      ),
+      (timer) async {
+        if (!mounted ||
+            !_actualizacionContinua) {
+          timer.cancel();
+
+          return;
+        }
+
+        transcurrido +=
+            intervaloMs;
+
+        double t =
+            transcurrido /
+                _duracionAnimacionGpsMs;
+
+        if (t > 1) {
+          t = 1;
+        }
+
+        final suavizado =
+            _easeInOutCubic(
+          t,
+        );
+
+        final punto =
+            LatLng(
+          origen.latitude +
+              ((destino.latitude -
+                      origen.latitude) *
+                  suavizado),
+
+          origen.longitude +
+              ((destino.longitude -
+                      origen.longitude) *
+                  suavizado),
+        );
+
+        _puntoGpsVisual =
+            punto;
+
+        if (!_actualizandoMarcadorGps) {
+          _actualizandoMarcadorGps =
+              true;
+
+          try {
+            await _actualizarMarcadorGps(
+              punto,
+            );
+
+            await _actualizarCamaraGps(
+              punto,
+            );
+          } finally {
+            _actualizandoMarcadorGps =
+                false;
+          }
+        }
+
+        if (t >= 1) {
+          timer.cancel();
+
+          _puntoGpsVisual =
+              destino;
+
+          if (!_actualizandoMarcadorGps) {
+            _actualizandoMarcadorGps =
+                true;
+
+            try {
+              await _actualizarMarcadorGps(
+                destino,
+              );
+
+              await _actualizarCamaraGps(
+                destino,
+              );
+            } finally {
+              _actualizandoMarcadorGps =
+                  false;
+            }
+          }
+        }
+      },
+    );
+  }
+
+  // ============================================================
+  // EASING
+  // ============================================================
+
+  double _easeInOutCubic(
+    double t,
+  ) {
+    if (t < 0.5) {
+      return 4 *
+          t *
+          t *
+          t;
+    }
+
+    return 1 -
+        pow(
+              -2 * t + 2,
+              3,
+            ) /
+            2;
+  }
+
+  // ============================================================
+  // MARCADOR GPS
+  // ============================================================
+
+  Future<void>
+      _actualizarMarcadorGps(
+    LatLng punto,
+  ) async {
+    final controller =
+        _mapController;
+
+    if (controller == null ||
+        !_estiloCargado) {
+      return;
+    }
 
     try {
       if (_marcadorUsuario ==
           null) {
         _marcadorUsuario =
-            await controller
-                .addCircle(
+            await controller.addCircle(
           CircleOptions(
             geometry:
                 punto,
-
             circleRadius:
                 9,
-
             circleColor:
                 '#FF7E01',
-
             circleStrokeColor:
                 '#FFFFFF',
-
             circleStrokeWidth:
                 3,
-
             circleOpacity:
                 1,
           ),
         );
       } else {
-        await controller
-            .updateCircle(
+        await controller.updateCircle(
           _marcadorUsuario!,
           CircleOptions(
             geometry:
@@ -1897,20 +2085,122 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
           ),
         );
       }
-
-      if (centrar) {
-        await controller
-            .animateCamera(
-          CameraUpdate
-              .newLatLngZoom(
-            punto,
-            15,
-          ),
-        );
-      }
     } catch (e) {
       debugPrint(
-        'ERROR UBICACIÓN: $e',
+        'ERROR MARCADOR GPS: $e',
+      );
+    }
+  }
+
+  // ============================================================
+  // SEGUIR CÁMARA GPS
+  // ============================================================
+
+  Future<void> _actualizarCamaraGps(
+    LatLng punto,
+  ) async {
+    if (!_seguirUsuario) {
+      return;
+    }
+
+    final ahora =
+        DateTime.now();
+
+    if (_ultimaActualizacionCamara !=
+            null &&
+        ahora
+                .difference(
+                  _ultimaActualizacionCamara!,
+                )
+                .inMilliseconds <
+            _intervaloCamaraGpsMs) {
+      return;
+    }
+
+    _ultimaActualizacionCamara =
+        ahora;
+
+    _centroCamaraActual =
+        punto;
+
+    await _animarCamara(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target:
+              punto,
+          zoom:
+              _zoomActual,
+          bearing:
+              _bearingActual,
+          tilt:
+              _tiltActual,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // DETENER GPS
+  // ============================================================
+
+  Future<void>
+      _detenerActualizacionContinua() async {
+    _actualizacionContinua =
+        false;
+
+    _seguirUsuario =
+        false;
+
+    await _streamPosicion?.cancel();
+
+    _streamPosicion =
+        null;
+
+    _timerAnimacionGps?.cancel();
+
+    _timerAnimacionGps =
+        null;
+
+    _ultimaActualizacionCamara =
+        null;
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  // ============================================================
+  // DIBUJAR UBICACIÓN
+  // ============================================================
+
+  Future<void> _dibujarUbicacion(
+    Position posicion, {
+    required bool centrar,
+  }) async {
+    final punto =
+        LatLng(
+      posicion.latitude,
+      posicion.longitude,
+    );
+
+    _posicionUsuario =
+        posicion;
+
+    _puntoGpsVisual ??=
+        punto;
+
+    await _actualizarMarcadorGps(
+      punto,
+    );
+
+    if (centrar) {
+      _seguirUsuario =
+          true;
+
+      await _centrarEnUsuario(
+        punto,
+        zoom:
+            17,
       );
     }
   }
@@ -1926,11 +2216,9 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
       return;
     }
 
-    if (emprendimiento
-                .latitud ==
+    if (emprendimiento.latitud ==
             null ||
-        emprendimiento
-                .longitud ==
+        emprendimiento.longitud ==
             null) {
       _mostrarMensaje(
         'Este emprendimiento no tiene ubicación.',
@@ -1951,18 +2239,12 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
       final posicion =
           await _obtenerPosicionParaRuta();
 
-      if (posicion ==
-          null) {
+      if (posicion == null) {
         return;
       }
 
       _posicionUsuario =
           posicion;
-
-      await _dibujarUbicacion(
-        posicion,
-        centrar: false,
-      );
 
       final origen =
           LatLng(
@@ -1976,12 +2258,18 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
         emprendimiento.longitud!,
       );
 
+      _puntoGpsVisual =
+          origen;
+
+      await _actualizarMarcadorGps(
+        origen,
+      );
+
       final resultado =
           await RutaService
               .obtenerRuta(
         origen:
             origen,
-
         destino:
             destino,
       );
@@ -2003,6 +2291,9 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
         resultado['geojson'],
       );
 
+      _geoJsonRutaActual =
+          geojson;
+
       await _dibujarRuta(
         geojson,
       );
@@ -2021,10 +2312,17 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
         setState(() {});
       }
 
+      _seguirUsuario =
+          false;
+
       await _encuadrarRuta(
         origen,
         destino,
       );
+
+      if (!_actualizacionContinua) {
+        await _iniciarActualizacionContinua();
+      }
     } catch (e) {
       debugPrint(
         'ERROR RUTA: $e',
@@ -2055,64 +2353,60 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
     final controller =
         _mapController;
 
-    if (controller ==
-        null) {
+    if (controller == null ||
+        !_estiloCargado) {
       return;
     }
 
-    if (_rutaCreada) {
-      await controller
-          .setGeoJsonSource(
+    try {
+      if (_rutaCreada) {
+        await controller
+            .setGeoJsonSource(
+          'merc-ruta',
+          geojson,
+        );
+
+        return;
+      }
+
+      await controller.addGeoJsonSource(
         'merc-ruta',
         geojson,
       );
 
-      return;
+      await controller.addLineLayer(
+        'merc-ruta',
+        'merc-ruta-borde',
+        const LineLayerProperties(
+          lineColor:
+              '#FFFFFF',
+          lineWidth:
+              9,
+          lineOpacity:
+              0.85,
+        ),
+      );
+
+      await controller.addLineLayer(
+        'merc-ruta',
+        'merc-ruta-line',
+        const LineLayerProperties(
+          lineColor:
+              '#11C031',
+          lineWidth:
+              6,
+          lineOpacity:
+              1,
+        ),
+      );
+
+      _rutaCreada =
+          true;
+    } catch (e) {
+      debugPrint(
+        'ERROR DIBUJANDO RUTA: $e',
+      );
     }
-
-    await controller
-        .addGeoJsonSource(
-      'merc-ruta',
-      geojson,
-    );
-
-    // Fondo blanco para que
-    // destaque sobre el naranja.
-    await controller
-        .addLineLayer(
-      'merc-ruta',
-      'merc-ruta-borde',
-      const LineLayerProperties(
-        lineColor:
-            '#FFFFFF',
-
-        lineWidth:
-            9,
-
-        lineOpacity:
-            0.85,
-      ),
-    );
-
-    // Ruta verde Beta 4.4.
-    await controller
-        .addLineLayer(
-      'merc-ruta',
-      'merc-ruta-line',
-      const LineLayerProperties(
-        lineColor:
-            '#11C031',
-
-        lineWidth:
-            6,
-
-        lineOpacity:
-            1,
-      ),
-    );
-
-    _rutaCreada =
-        true;
 
     if (mounted) {
       setState(() {});
@@ -2127,14 +2421,6 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
     LatLng origen,
     LatLng destino,
   ) async {
-    final controller =
-        _mapController;
-
-    if (controller ==
-        null) {
-      return;
-    }
-
     final south =
         min(
       origen.latitude,
@@ -2159,33 +2445,26 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
       destino.longitude,
     );
 
-    await controller
-        .animateCamera(
-      CameraUpdate
-          .newLatLngBounds(
+    await _animarCamara(
+      CameraUpdate.newLatLngBounds(
         LatLngBounds(
           southwest:
               LatLng(
             south,
             west,
           ),
-
           northeast:
               LatLng(
             north,
             east,
           ),
         ),
-
         left:
             55,
-
         top:
             100,
-
         right:
             55,
-
         bottom:
             150,
       ),
@@ -2201,22 +2480,18 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
     final controller =
         _mapController;
 
-    if (controller !=
-            null &&
+    if (controller != null &&
         _rutaCreada) {
       try {
-        await controller
-            .removeLayer(
+        await controller.removeLayer(
           'merc-ruta-line',
         );
 
-        await controller
-            .removeLayer(
+        await controller.removeLayer(
           'merc-ruta-borde',
         );
 
-        await controller
-            .removeSource(
+        await controller.removeSource(
           'merc-ruta',
         );
       } catch (e) {
@@ -2226,202 +2501,148 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
       }
     }
 
-    if (!mounted) {
+    _rutaCreada =
+        false;
+
+    _geoJsonRutaActual =
+        null;
+
+    _destinoActual =
+        null;
+
+    _distanciaRuta =
+        null;
+
+    _duracionRuta =
+        null;
+
+    _seguirUsuario =
+        false;
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  // ============================================================
+  // CENTRAR EL SALVADOR
+  // ============================================================
+
+  Future<void>
+      _centrarElSalvador() async {
+    _seguirUsuario =
+        false;
+
+    _centroCamaraActual =
+        _centroElSalvador;
+
+    _zoomActual =
+        8.5;
+
+    _bearingActual =
+        0;
+
+    _tiltActual =
+        0;
+
+    await _animarCamara(
+      CameraUpdate.newCameraPosition(
+        const CameraPosition(
+          target:
+              _centroElSalvador,
+          zoom:
+              8.5,
+          bearing:
+              0,
+          tilt:
+              0,
+        ),
+      ),
+    );
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  // ============================================================
+  // BRÚJULA
+  //
+  // SIEMPRE VISIBLE.
+  //
+  // Mantiene:
+  // - centro
+  // - zoom
+  //
+  // Restablece:
+  // - bearing = 0
+  // - tilt = 0
+  //
+  // Si la rotación está bloqueada no hace nada.
+  // ============================================================
+
+  Future<void>
+      _restablecerAnguloMapa() async {
+    if (!_rotacionActiva) {
       return;
     }
 
-    setState(() {
-      _rutaCreada =
-          false;
+    final centro =
+        _centroCamaraActual;
 
-      _destinoActual =
-          null;
+    final zoom =
+        _zoomActual;
 
-      _distanciaRuta =
-          null;
+    _bearingActual =
+        0;
 
-      _duracionRuta =
-          null;
-    });
-  }
+    _tiltActual =
+        0;
 
-  // ============================================================
-  // GPS DESACTIVADO
-  // ============================================================
-
-  void _mostrarDialogoGpsDesactivado() {
-    showDialog(
-      context:
-          context,
-
-      builder:
-          (dialogContext) {
-        return AlertDialog(
-          icon:
-              const Icon(
-            Icons
-                .location_off_outlined,
-
-            color:
-                _naranjaPrincipal,
-
-            size:
-                38,
-          ),
-
-          title:
-              const Text(
-            'Ubicación desactivada',
-          ),
-
-          content:
-              const Text(
-            'Activa la ubicación del dispositivo para poder usar el GPS o calcular una ruta.',
-          ),
-
-          actions: [
-            TextButton(
-              onPressed:
-                  () {
-                Navigator.pop(
-                  dialogContext,
-                );
-              },
-
-              child:
-                  const Text(
-                'Cancelar',
-              ),
-            ),
-
-            FilledButton(
-              style:
-                  FilledButton
-                      .styleFrom(
-                backgroundColor:
-                    _naranjaPrincipal,
-
-                foregroundColor:
-                    Colors.white,
-              ),
-
-              onPressed:
-                  () async {
-                Navigator.pop(
-                  dialogContext,
-                );
-
-                await Geolocator
-                    .openLocationSettings();
-              },
-
-              child:
-                  const Text(
-                'Abrir ajustes',
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // ============================================================
-  // PERMISO BLOQUEADO
-  // ============================================================
-
-  void _mostrarDialogoPermisoPermanente() {
-    showDialog(
-      context:
-          context,
-
-      builder:
-          (dialogContext) {
-        return AlertDialog(
-          icon:
-              const Icon(
-            Icons.gps_off,
-
-            color:
-                _naranjaPrincipal,
-          ),
-
-          title:
-              const Text(
-            'Permiso requerido',
-          ),
-
-          content:
-              const Text(
-            'El permiso de ubicación está bloqueado. Actívalo desde los ajustes de la aplicación.',
-          ),
-
-          actions: [
-            TextButton(
-              onPressed:
-                  () {
-                Navigator.pop(
-                  dialogContext,
-                );
-              },
-
-              child:
-                  const Text(
-                'Cancelar',
-              ),
-            ),
-
-            FilledButton(
-              style:
-                  FilledButton
-                      .styleFrom(
-                backgroundColor:
-                    _naranjaPrincipal,
-
-                foregroundColor:
-                    Colors.white,
-              ),
-
-              onPressed:
-                  () async {
-                Navigator.pop(
-                  dialogContext,
-                );
-
-                await Geolocator
-                    .openAppSettings();
-              },
-
-              child:
-                  const Text(
-                'Abrir ajustes',
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // ============================================================
-  // MENSAJES
-  // ============================================================
-
-  void _mostrarMensaje(
-    String mensaje,
-  ) {
-    ScaffoldMessenger.of(
-      context,
-    )
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content:
-              Text(
-            mensaje,
-          ),
+    await _animarCamara(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target:
+              centro,
+          zoom:
+              zoom,
+          bearing:
+              0,
+          tilt:
+              0,
         ),
-      );
+      ),
+    );
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  // ============================================================
+  // ROTACIÓN ON/OFF
+  //
+  // NO:
+  // - cambia centro
+  // - cambia zoom
+  // - cambia bearing
+  // - cambia tilt
+  // - centra El Salvador
+  //
+  // Solo bloquea/desbloquea los gestos.
+  // ============================================================
+
+  void _alternarRotacion() {
+    setState(() {
+      _rotacionActiva =
+          !_rotacionActiva;
+    });
+
+    _mostrarMensaje(
+      _rotacionActiva
+          ? 'Rotación activada'
+          : 'Rotación bloqueada',
+    );
   }
 
   // ============================================================
@@ -2429,12 +2650,7 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
   // ============================================================
 
   Future<void> _acercar() async {
-    if (_mapController ==
-        null) {
-      return;
-    }
-
-    final zoom =
+    final nuevoZoom =
         (_zoomActual + 1)
             .clamp(
               _zoomMinimo,
@@ -2442,21 +2658,18 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
             )
             .toDouble();
 
-    await _mapController!
-        .animateCamera(
+    _zoomActual =
+        nuevoZoom;
+
+    await _animarCamara(
       CameraUpdate.zoomTo(
-        zoom,
+        nuevoZoom,
       ),
     );
   }
 
   Future<void> _alejar() async {
-    if (_mapController ==
-        null) {
-      return;
-    }
-
-    final zoom =
+    final nuevoZoom =
         (_zoomActual - 1)
             .clamp(
               _zoomMinimo,
@@ -2464,48 +2677,18 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
             )
             .toDouble();
 
-    await _mapController!
-        .animateCamera(
+    _zoomActual =
+        nuevoZoom;
+
+    await _animarCamara(
       CameraUpdate.zoomTo(
-        zoom,
+        nuevoZoom,
       ),
     );
   }
 
   // ============================================================
-  // CENTRAR
-  // ============================================================
-
-  Future<void>
-      _centrarElSalvador() async {
-    if (_mapController ==
-        null) {
-      return;
-    }
-
-    await _mapController!
-        .animateCamera(
-      CameraUpdate
-          .newLatLngBounds(
-        _limitesElSalvador,
-
-        left:
-            25,
-
-        top:
-            80,
-
-        right:
-            25,
-
-        bottom:
-            70,
-      ),
-    );
-  }
-
-  // ============================================================
-  // NIVEL
+  // NIVEL ADMIN
   // ============================================================
 
   String _nivelActual() {
@@ -2528,11 +2711,7 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
   }
 
   // ============================================================
-  // SELECTOR DE CONTENIDO - BETA 4.5
-  //
-  // Por ahora únicamente "Emprendimientos" está implementado.
-  // "Locales en renta" aparece como opción preparada para la
-  // siguiente etapa, pero todavía no cambia ninguna capa.
+  // SELECTOR CONTENIDO MAPA
   // ============================================================
 
   void _mostrarSelectorContenidoMapa() {
@@ -2541,11 +2720,16 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
     }
 
     showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      builder: (bottomContext) {
-        final bool oscuro =
-            Theme.of(bottomContext).brightness ==
+      context:
+          context,
+      showDragHandle:
+          true,
+      builder:
+          (bottomContext) {
+        final oscuro =
+            Theme.of(
+                      bottomContext,
+                    ).brightness ==
                 Brightness.dark;
 
         final Color textoSecundario =
@@ -2555,29 +2739,36 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
 
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(
+            padding:
+                const EdgeInsets.fromLTRB(
               16,
               0,
               16,
               20,
             ),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize:
+                  MainAxisSize.min,
               crossAxisAlignment:
                   CrossAxisAlignment.stretch,
               children: [
                 const Padding(
-                  padding: EdgeInsets.fromLTRB(
+                  padding:
+                      EdgeInsets.fromLTRB(
                     8,
                     4,
                     8,
                     14,
                   ),
-                  child: Text(
+                  child:
+                      Text(
                     'Mostrar en el mapa',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                    style:
+                        TextStyle(
+                      fontSize:
+                          20,
+                      fontWeight:
+                          FontWeight.bold,
                     ),
                   ),
                 ),
@@ -2587,39 +2778,53 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                 // =================================================
 
                 ListTile(
-                  shape: RoundedRectangleBorder(
+                  shape:
+                      RoundedRectangleBorder(
                     borderRadius:
-                        BorderRadius.circular(14),
+                        BorderRadius.circular(
+                      14,
+                    ),
                   ),
                   tileColor:
-                      _naranjaPrincipal.withValues(
+                      _naranjaPrincipal
+                          .withValues(
                     alpha:
-                        oscuro ? 0.16 : 0.09,
+                        oscuro
+                            ? 0.16
+                            : 0.09,
                   ),
-                  leading: const CircleAvatar(
+                  leading:
+                      const CircleAvatar(
                     backgroundColor:
                         _naranjaPrincipal,
                     foregroundColor:
                         Colors.white,
-                    child: Icon(
+                    child:
+                        Icon(
                       Icons.storefront_outlined,
                     ),
                   ),
-                  title: const Text(
+                  title:
+                      const Text(
                     'Emprendimientos',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
+                    style:
+                        TextStyle(
+                      fontWeight:
+                          FontWeight.w700,
                     ),
                   ),
-                  subtitle: const Text(
+                  subtitle:
+                      const Text(
                     'Mostrar negocios registrados',
                   ),
-                  trailing: const Icon(
+                  trailing:
+                      const Icon(
                     Icons.check_circle,
                     color:
                         _naranjaPrincipal,
                   ),
-                  onTap: () {
+                  onTap:
+                      () {
                     Navigator.pop(
                       bottomContext,
                     );
@@ -2627,41 +2832,53 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                 ),
 
                 const SizedBox(
-                  height: 10,
+                  height:
+                      10,
                 ),
 
                 // =================================================
                 // LOCALES EN RENTA
-                // OPCIÓN VISIBLE, AÚN NO IMPLEMENTADA
                 // =================================================
 
                 ListTile(
-                  shape: RoundedRectangleBorder(
+                  shape:
+                      RoundedRectangleBorder(
                     borderRadius:
-                        BorderRadius.circular(14),
+                        BorderRadius.circular(
+                      14,
+                    ),
                   ),
-                  leading: const CircleAvatar(
-                    child: Icon(
+                  leading:
+                      const CircleAvatar(
+                    child:
+                        Icon(
                       Icons.apartment_outlined,
                     ),
                   ),
-                  title: const Text(
+                  title:
+                      const Text(
                     'Locales en renta',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
+                    style:
+                        TextStyle(
+                      fontWeight:
+                          FontWeight.w700,
                     ),
                   ),
-                  subtitle: Text(
+                  subtitle:
+                      Text(
                     'Disponible próximamente',
-                    style: TextStyle(
+                    style:
+                        TextStyle(
                       color:
                           textoSecundario,
                     ),
                   ),
-                  trailing: const Icon(
+                  trailing:
+                      const Icon(
                     Icons.schedule_outlined,
                   ),
-                  onTap: () {
+                  onTap:
+                      () {
                     Navigator.pop(
                       bottomContext,
                     );
@@ -2680,6 +2897,170 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
   }
 
   // ============================================================
+  // GPS DESACTIVADO
+  // ============================================================
+
+  void _mostrarDialogoGpsDesactivado() {
+    showDialog(
+      context:
+          context,
+      builder:
+          (dialogContext) {
+        return AlertDialog(
+          icon:
+              const Icon(
+            Icons.location_off_outlined,
+            color:
+                _naranjaPrincipal,
+            size:
+                38,
+          ),
+          title:
+              const Text(
+            'Ubicación desactivada',
+          ),
+          content:
+              const Text(
+            'Activa la ubicación del dispositivo para poder usar el GPS o calcular una ruta.',
+          ),
+          actions: [
+            TextButton(
+              onPressed:
+                  () {
+                Navigator.pop(
+                  dialogContext,
+                );
+              },
+              child:
+                  const Text(
+                'Cancelar',
+              ),
+            ),
+            FilledButton(
+              style:
+                  FilledButton.styleFrom(
+                backgroundColor:
+                    _naranjaPrincipal,
+                foregroundColor:
+                    Colors.white,
+              ),
+              onPressed:
+                  () async {
+                Navigator.pop(
+                  dialogContext,
+                );
+
+                await Geolocator
+                    .openLocationSettings();
+              },
+              child:
+                  const Text(
+                'Abrir ajustes',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // PERMISO PERMANENTE
+  // ============================================================
+
+  void _mostrarDialogoPermisoPermanente() {
+    showDialog(
+      context:
+          context,
+      builder:
+          (dialogContext) {
+        return AlertDialog(
+          icon:
+              const Icon(
+            Icons.gps_off,
+            color:
+                _naranjaPrincipal,
+          ),
+          title:
+              const Text(
+            'Permiso requerido',
+          ),
+          content:
+              const Text(
+            'El permiso de ubicación está bloqueado. Actívalo desde los ajustes de la aplicación.',
+          ),
+          actions: [
+            TextButton(
+              onPressed:
+                  () {
+                Navigator.pop(
+                  dialogContext,
+                );
+              },
+              child:
+                  const Text(
+                'Cancelar',
+              ),
+            ),
+            FilledButton(
+              style:
+                  FilledButton.styleFrom(
+                backgroundColor:
+                    _naranjaPrincipal,
+                foregroundColor:
+                    Colors.white,
+              ),
+              onPressed:
+                  () async {
+                Navigator.pop(
+                  dialogContext,
+                );
+
+                await Geolocator
+                    .openAppSettings();
+              },
+              child:
+                  const Text(
+                'Abrir ajustes',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // MENSAJES
+  // ============================================================
+
+  void _mostrarMensaje(
+    String mensaje,
+  ) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(
+      context,
+    )
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          duration:
+              const Duration(
+            milliseconds:
+                1300,
+          ),
+          content:
+              Text(
+            mensaje,
+          ),
+        ),
+      );
+  }
+
+  // ============================================================
   // BOTÓN
   // ============================================================
 
@@ -2689,39 +3070,33 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
     required VoidCallback onPressed,
     required bool oscuro,
     bool cargando = false,
+    Color? color,
   }) {
-    return FloatingActionButton
-        .small(
+    return FloatingActionButton.small(
       heroTag:
           tag,
-
       backgroundColor:
           oscuro
               ? _panelOscuro
               : Colors.white,
-
       foregroundColor:
-          _naranjaPrincipal,
-
+          color ??
+              _naranjaPrincipal,
       onPressed:
           cargando
               ? null
               : onPressed,
-
       child:
           cargando
               ? const SizedBox(
                   width:
                       19,
-
                   height:
                       19,
-
                   child:
                       CircularProgressIndicator(
                     strokeWidth:
                         2,
-
                     color:
                         _naranjaPrincipal,
                   ),
@@ -2782,6 +3157,10 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
   Widget build(
     BuildContext context,
   ) {
+    super.build(
+      context,
+    );
+
     final oscuro =
         Theme.of(context)
                 .brightness ==
@@ -2807,8 +3186,8 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
     return Scaffold(
       backgroundColor:
           fondo,
-
-      body: Stack(
+      body:
+          Stack(
         children: [
           // ====================================================
           // MAPA
@@ -2818,8 +3197,8 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
             key:
                 ValueKey(
               oscuro
-                  ? 'map-dark'
-                  : 'map-light',
+                  ? 'map-dark-emprendedor'
+                  : 'map-light-emprendedor',
             ),
 
             styleString:
@@ -2828,12 +3207,15 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                     : _estiloClaro,
 
             initialCameraPosition:
-                const CameraPosition(
+                CameraPosition(
               target:
-                  _centroElSalvador,
-
+                  _centroCamaraActual,
               zoom:
-                  8.5,
+                  _zoomActual,
+              bearing:
+                  _bearingActual,
+              tilt:
+                  _tiltActual,
             ),
 
             cameraTargetBounds:
@@ -2847,12 +3229,29 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
               _zoomMaximo,
             ),
 
+            scrollGesturesEnabled:
+                true,
+
+            zoomGesturesEnabled:
+                true,
+
+            // ==================================================
+            // ROTACIÓN
+            // ==================================================
+
             rotateGesturesEnabled:
-                false,
+                _rotacionActiva,
 
+            /*
+             * Cuando bloqueamos rotación también bloqueamos
+             * inclinación.
+             *
+             * De esta forma el mapa realmente queda estabilizado.
+             */
             tiltGesturesEnabled:
-                false,
+                _rotacionActiva,
 
+            // Nuestra brújula personalizada.
             compassEnabled:
                 false,
 
@@ -2868,30 +3267,57 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
             onStyleLoadedCallback:
                 _onStyleLoaded,
 
-            // ==================================================
-            // TAP ROBUSTO EN MÓVIL
-            //
-            // La capa interactiva dispara onFeatureTapped y,
-            // además, este callback consulta manualmente la capa
-            // cuando el toque específico falla en Android/iOS.
-            // ==================================================
-
             onMapClick:
                 _onMapClick,
 
             featureTapsTriggersMapClick:
                 true,
 
+            // ==================================================
+            // CÁMARA
+            //
+            // IMPORTANTE:
+            // NO usamos setState durante el movimiento.
+            // ==================================================
+
             onCameraMove:
                 (position) {
-              if ((position.zoom -
-                          _zoomActual)
-                      .abs() >
-                  0.05) {
-                setState(() {
-                  _zoomActual =
-                      position.zoom;
-                });
+              _centroCamaraActual =
+                  position.target;
+
+              _zoomActual =
+                  position.zoom;
+
+              _bearingActual =
+                  position.bearing;
+
+              _tiltActual =
+                  position.tilt;
+
+              /*
+               * Al mover manualmente el mapa dejamos
+               * de seguir la cámara GPS.
+               *
+               * El marcador continúa actualizándose.
+               */
+              if (!_moviendoCamaraProgramaticamente &&
+                  _seguirUsuario) {
+                _seguirUsuario =
+                    false;
+              }
+            },
+
+            /*
+             * Solo refrescamos widgets cuando termina
+             * el movimiento.
+             *
+             * Esto actualiza también la orientación visual
+             * de nuestra brújula.
+             */
+            onCameraIdle:
+                () {
+              if (mounted) {
+                setState(() {});
               }
             },
           ),
@@ -2908,10 +3334,8 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                 alpha:
                     0.80,
               ),
-
               alignment:
                   Alignment.center,
-
               child:
                   const CircularProgressIndicator(
                 color:
@@ -2932,17 +3356,15 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                 80,
                 12,
               ),
-
-              child: Container(
+              child:
+                  Container(
                 height:
                     52,
-
                 padding:
                     const EdgeInsets.symmetric(
                   horizontal:
                       15,
                 ),
-
                 decoration:
                     BoxDecoration(
                   color:
@@ -2950,19 +3372,16 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                     alpha:
                         0.95,
                   ),
-
                   borderRadius:
                       BorderRadius.circular(
                     18,
                   ),
                 ),
-
-                child: Row(
+                child:
+                    Row(
                   children: [
                     const Icon(
-                      Icons
-                          .map_outlined,
-
+                      Icons.map_outlined,
                       color:
                           _naranjaPrincipal,
                     ),
@@ -2973,20 +3392,119 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                     ),
 
                     Expanded(
-                      child: Text(
+                      child:
+                          Text(
                         'Mapa de El Salvador',
-
                         style:
                             TextStyle(
                           color:
                               texto,
-
                           fontWeight:
                               FontWeight.bold,
                         ),
                       ),
                     ),
+
+                    if (_actualizacionContinua)
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.gps_fixed,
+                            color:
+                                _verdeRuta,
+                            size:
+                                17,
+                          ),
+
+                          const SizedBox(
+                            width:
+                                4,
+                          ),
+
+                          Text(
+                            _seguirUsuario
+                                ? 'GPS'
+                                : 'GPS libre',
+                            style:
+                                const TextStyle(
+                              color:
+                                  _verdeRuta,
+                              fontSize:
+                                  11,
+                              fontWeight:
+                                  FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                   ],
+                ),
+              ),
+            ),
+          ),
+
+          // ====================================================
+          // BRÚJULA
+          //
+          // SIEMPRE VISIBLE.
+          //
+          // Rotación activa:
+          // - naranja
+          // - clickable
+          //
+          // Rotación bloqueada:
+          // - gris
+          // - deshabilitada
+          //
+          // El icono gira según el bearing actual.
+          // ====================================================
+
+          Positioned(
+            left:
+                15,
+
+            top:
+                MediaQuery.of(
+                      context,
+                    ).padding.top +
+                    78,
+
+            child:
+                FloatingActionButton.small(
+              heroTag:
+                  'brujulaEmprendedor',
+
+              backgroundColor:
+                  oscuro
+                      ? _panelOscuro
+                      : Colors.white,
+
+              foregroundColor:
+                  _rotacionActiva
+                      ? _naranjaPrincipal
+                      : Colors.grey,
+
+              /*
+               * null hace que realmente quede
+               * deshabilitada.
+               */
+              onPressed:
+                  _rotacionActiva
+                      ? _restablecerAnguloMapa
+                      : null,
+
+              child:
+                  Transform.rotate(
+                angle:
+                    -_bearingActual *
+                        pi /
+                        180,
+
+                child:
+                    Icon(
+                  _rotacionActiva
+                      ? Icons.navigation
+                      : Icons.navigation_outlined,
                 ),
               ),
             ),
@@ -2999,93 +3517,27 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
           Positioned(
             right:
                 15,
-
             top:
                 MediaQuery.of(
                       context,
                     ).padding.top +
                     12,
-
-            child: Column(
+            child:
+                Column(
               children: [
+                // =================================================
+                // ZOOM +
+                // =================================================
+
                 _boton(
                   tag:
-                      'zoomMas',
-
+                      'zoomMasEmprendedor',
                   icon:
                       Icons.add,
-
                   onPressed:
                       _acercar,
-
                   oscuro:
                       oscuro,
-                ),
-
-                const SizedBox(
-                  height:
-                      10,
-                ),
-
-                _boton(
-                  tag:
-                      'zoomMenos',
-
-                  icon:
-                      Icons.remove,
-
-                  onPressed:
-                      _alejar,
-
-                  oscuro:
-                      oscuro,
-                ),
-
-                const SizedBox(
-                  height:
-                      10,
-                ),
-
-                _boton(
-                  tag:
-                      'centrar',
-
-                  icon:
-                      Icons
-                          .center_focus_strong,
-
-                  onPressed:
-                      _centrarElSalvador,
-
-                  oscuro:
-                      oscuro,
-                ),
-
-                const SizedBox(
-                  height:
-                      10,
-                ),
-
-                _boton(
-                  tag:
-                      'gps',
-
-                  icon:
-                      _posicionUsuario ==
-                              null
-                          ? Icons
-                              .location_searching
-                          : Icons
-                              .my_location,
-
-                  onPressed:
-                      _obtenerMiUbicacion,
-
-                  oscuro:
-                      oscuro,
-
-                  cargando:
-                      _obteniendoUbicacion,
                 ),
 
                 const SizedBox(
@@ -3094,19 +3546,121 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                 ),
 
                 // =================================================
-                // BETA 4.5 - SELECTOR DE CONTENIDO
+                // ZOOM -
+                // =================================================
+
+                _boton(
+                  tag:
+                      'zoomMenosEmprendedor',
+                  icon:
+                      Icons.remove,
+                  onPressed:
+                      _alejar,
+                  oscuro:
+                      oscuro,
+                ),
+
+                const SizedBox(
+                  height:
+                      10,
+                ),
+
+                // =================================================
+                // CENTRAR EL SALVADOR
+                // =================================================
+
+                _boton(
+                  tag:
+                      'centrarEmprendedor',
+                  icon:
+                      Icons.center_focus_strong,
+                  onPressed:
+                      _centrarElSalvador,
+                  oscuro:
+                      oscuro,
+                ),
+
+                const SizedBox(
+                  height:
+                      10,
+                ),
+
+                // =================================================
+                // GPS
+                // =================================================
+
+                _boton(
+                  tag:
+                      'gpsEmprendedor',
+                  icon:
+                      _actualizacionContinua
+                          ? (_seguirUsuario
+                              ? Icons.gps_fixed
+                              : Icons.my_location)
+                          : (_posicionUsuario ==
+                                  null
+                              ? Icons.location_searching
+                              : Icons.my_location),
+                  onPressed:
+                      _obtenerMiUbicacion,
+                  oscuro:
+                      oscuro,
+                  cargando:
+                      _obteniendoUbicacion,
+                  color:
+                      _actualizacionContinua
+                          ? _verdeRuta
+                          : _naranjaPrincipal,
+                ),
+
+                const SizedBox(
+                  height:
+                      10,
+                ),
+
+                // =================================================
+                // ROTACIÓN
+                //
+                // No mueve la cámara.
+                // =================================================
+
+                _boton(
+                  tag:
+                      'rotacionEmprendedor',
+
+                  icon:
+                      _rotacionActiva
+                          ? Icons.screen_rotation_alt
+                          : Icons.screen_lock_rotation,
+
+                  onPressed:
+                      _alternarRotacion,
+
+                  oscuro:
+                      oscuro,
+
+                  color:
+                      _rotacionActiva
+                          ? _naranjaPrincipal
+                          : Colors.grey,
+                ),
+
+                const SizedBox(
+                  height:
+                      10,
+                ),
+
+                // =================================================
+                // CONTENIDO MAPA
                 // =================================================
 
                 _boton(
                   tag:
                       'contenidoMapaEmprendedor',
-
                   icon:
                       Icons.layers_outlined,
-
                   onPressed:
                       _mostrarSelectorContenidoMapa,
-
                   oscuro:
                       oscuro,
                 ),
@@ -3120,28 +3674,27 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
 
           if (_calculandoRuta)
             const Center(
-              child: Card(
-                child: Padding(
+              child:
+                  Card(
+                child:
+                    Padding(
                   padding:
                       EdgeInsets.all(
                     18,
                   ),
-
-                  child: Row(
+                  child:
+                      Row(
                     mainAxisSize:
                         MainAxisSize.min,
-
                     children: [
                       CircularProgressIndicator(
                         color:
                             _verdeRuta,
                       ),
-
                       SizedBox(
                         width:
                             15,
                       ),
-
                       Text(
                         'Calculando ruta...',
                       ),
@@ -3161,23 +3714,20 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
             Positioned(
               left:
                   15,
-
               right:
                   15,
-
               bottom:
                   20,
-
-              child: SafeArea(
+              child:
+                  SafeArea(
                 top:
                     false,
-
-                child: Container(
+                child:
+                    Container(
                   padding:
                       const EdgeInsets.all(
                     15,
                   ),
-
                   decoration:
                       BoxDecoration(
                     color:
@@ -3185,12 +3735,10 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                       alpha:
                           0.97,
                     ),
-
                     borderRadius:
                         BorderRadius.circular(
                       18,
                     ),
-
                     boxShadow: [
                       BoxShadow(
                         color:
@@ -3199,35 +3747,29 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                           alpha:
                               0.15,
                         ),
-
                         blurRadius:
                             12,
                       ),
                     ],
                   ),
-
-                  child: Row(
+                  child:
+                      Row(
                     children: [
                       Container(
                         width:
                             45,
-
                         height:
                             45,
-
                         decoration:
                             const BoxDecoration(
                           color:
                               _verdeRuta,
-
                           shape:
                               BoxShape.circle,
                         ),
-
                         child:
                             const Icon(
                           Icons.route,
-
                           color:
                               Colors.white,
                         ),
@@ -3239,23 +3781,18 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                       ),
 
                       Expanded(
-                        child: Column(
+                        child:
+                            Column(
                           crossAxisAlignment:
-                              CrossAxisAlignment
-                                  .start,
-
+                              CrossAxisAlignment.start,
                           children: [
                             Text(
                               _destinoActual!
                                   .nombre,
-
                               maxLines:
                                   1,
-
                               overflow:
-                                  TextOverflow
-                                      .ellipsis,
-
+                                  TextOverflow.ellipsis,
                               style:
                                   const TextStyle(
                                 fontWeight:
@@ -3271,12 +3808,10 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                             Text(
                               '${_formatearDistancia()} · '
                               '${_formatearDuracion()}',
-
                               style:
                                   const TextStyle(
                                 color:
                                     _verdeRuta,
-
                                 fontWeight:
                                     FontWeight.bold,
                               ),
@@ -3288,10 +3823,8 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                       IconButton(
                         tooltip:
                             'Cancelar ruta',
-
                         onPressed:
                             _cancelarRuta,
-
                         icon:
                             const Icon(
                           Icons.close,
@@ -3306,24 +3839,21 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
             Positioned(
               left:
                   15,
-
               bottom:
                   25,
-
-              child: SafeArea(
+              child:
+                  SafeArea(
                 top:
                     false,
-
-                child: Container(
+                child:
+                    Container(
                   padding:
                       const EdgeInsets.symmetric(
                     horizontal:
                         14,
-
                     vertical:
                         9,
                   ),
-
                   decoration:
                       BoxDecoration(
                     color:
@@ -3331,25 +3861,20 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                       alpha:
                           0.95,
                     ),
-
                     borderRadius:
                         BorderRadius.circular(
                       20,
                     ),
                   ),
-
-                  child: Row(
+                  child:
+                      Row(
                     mainAxisSize:
                         MainAxisSize.min,
-
                     children: [
                       const Icon(
-                        Icons
-                            .layers_outlined,
-
+                        Icons.layers_outlined,
                         color:
                             _naranjaPrincipal,
-
                         size:
                             17,
                       ),
@@ -3362,15 +3887,12 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
                       Text(
                         '${_nivelActual()} · '
                         'Zoom ${_zoomActual.toStringAsFixed(1)}',
-
                         style:
                             TextStyle(
                           color:
                               texto,
-
                           fontWeight:
                               FontWeight.bold,
-
                           fontSize:
                               12,
                         ),
@@ -3388,31 +3910,28 @@ class _MapaScreenEmprendedorState extends State<MapaScreenEmprendedor> {
           if (_error !=
               null)
             Center(
-              child: Container(
+              child:
+                  Container(
                 margin:
                     const EdgeInsets.all(
                   30,
                 ),
-
                 padding:
                     const EdgeInsets.all(
                   20,
                 ),
-
                 decoration:
                     BoxDecoration(
                   color:
                       panel,
-
                   borderRadius:
                       BorderRadius.circular(
                     18,
                   ),
                 ),
-
-                child: Text(
+                child:
+                    Text(
                   _error!,
-
                   textAlign:
                       TextAlign.center,
                 ),

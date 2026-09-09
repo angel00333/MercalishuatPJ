@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -18,50 +19,27 @@ class MapaScreen extends StatefulWidget {
   });
 
   @override
-  State<MapaScreen> createState() =>
-      _MapaScreenState();
+  State<MapaScreen> createState() => _MapaScreenState();
 }
 
-class _MapaScreenState extends State<MapaScreen> {
+class _MapaScreenState extends State<MapaScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   // ============================================================
-  // CONTROLADOR
+  // MAPA
   // ============================================================
 
   MapLibreMapController? _mapController;
 
-  Circle? _marcadorUsuario;
-
-  // ============================================================
-  // EMPRENDIMIENTOS
-  // ============================================================
-
-  static const String _sourceEmprendimientos =
-      'merc-emprendimientos-source';
-
-  static const String _layerEmprendimientos =
-      'merc-emprendimientos-layer';
-
-  static const String _iconoTienda =
-      'merc-marker-tienda';
-
-  bool _iconoTiendaCargado =
-      false;
-
-  bool _capaEmprendimientosCargada =
-      false;
-
-  List<Emprendimiento> _emprendimientos =
-      [];
-
-  bool _cargandoEmprendimientos =
-      false;
+  bool _moviendoCamaraProgramaticamente = false;
 
   // ============================================================
   // EL SALVADOR
   // ============================================================
 
-  static const LatLng _centroElSalvador =
-      LatLng(
+  static const LatLng _centroElSalvador = LatLng(
     13.7942,
     -88.8965,
   );
@@ -78,14 +56,59 @@ class _MapaScreenState extends State<MapaScreen> {
     ),
   );
 
-  static const double _zoomMinimo =
-      7.4;
+  static const double _zoomMinimo = 7.4;
+  static const double _zoomMaximo = 19.0;
 
-  static const double _zoomMaximo =
-      19.0;
+  // ============================================================
+  // CÁMARA
+  // ============================================================
 
-  double _zoomActual =
-      8.5;
+  LatLng _centroCamaraActual =
+      _centroElSalvador;
+
+  double _zoomActual = 8.5;
+
+  double _bearingActual = 0.0;
+
+  double _tiltActual = 0.0;
+
+  bool _primeraCargaEstilo = true;
+
+  // ============================================================
+  // ROTACIÓN / BRÚJULA
+  // ============================================================
+
+  /*
+   * La rotación inicia ACTIVA.
+   *
+   * La brújula:
+   * - siempre aparece desde que abre el mapa
+   * - funciona mientras la rotación está activa
+   * - se deshabilita cuando bloqueamos la rotación
+   * - NO mueve el mapa al activar/desactivar rotación
+   */
+  bool _rotacionActiva = true;
+
+  // ============================================================
+  // EMPRENDIMIENTOS
+  // ============================================================
+
+  static const String _sourceEmprendimientos =
+      'merc-emprendimientos-source';
+
+  static const String _layerEmprendimientos =
+      'merc-emprendimientos-layer';
+
+  static const String _iconoTienda =
+      'merc-marker-tienda';
+
+  bool _iconoTiendaCargado = false;
+
+  bool _capaEmprendimientosCargada = false;
+
+  bool _cargandoEmprendimientos = false;
+
+  List<Emprendimiento> _emprendimientos = [];
 
   // ============================================================
   // ESTILOS
@@ -101,53 +124,39 @@ class _MapaScreenState extends State<MapaScreen> {
   // COLORES
   // ============================================================
 
-  static const Color _naranjaPrincipal =
-      Color(
+  static const Color _naranjaPrincipal = Color(
     0xFFFF7E01,
   );
 
-  static const Color _verdeRuta =
-      Color(
+  static const Color _verdeRuta = Color(
     0xFF11C031,
   );
 
-  static const Color _panelOscuro =
-      Color(
+  static const Color _panelOscuro = Color(
     0xFF2A2045,
   );
 
-  static const Color _fondoOscuro =
-      Color(
+  static const Color _fondoOscuro = Color(
     0xFF171320,
   );
 
-  static const Color _fondoClaro =
-      Color(
+  static const Color _fondoClaro = Color(
     0xFFFFF6ED,
   );
 
   // ============================================================
-  // ADMIN
+  // GEOJSON
   // ============================================================
 
   Map<String, dynamic>? _admin0;
-
   Map<String, dynamic>? _admin1;
-
   Map<String, dynamic>? _admin2;
-
   Map<String, dynamic>? _admin3;
-
   Map<String, dynamic>? _mascara;
 
-  bool _geoJsonCargado =
-      false;
-
-  bool _estiloCargado =
-      false;
-
-  bool _capasCargadas =
-      false;
+  bool _geoJsonCargado = false;
+  bool _estiloCargado = false;
+  bool _capasCargadas = false;
 
   String? _error;
 
@@ -157,18 +166,37 @@ class _MapaScreenState extends State<MapaScreen> {
 
   Position? _posicionUsuario;
 
-  bool _obteniendoUbicacion =
-      false;
+  Circle? _marcadorUsuario;
+
+  LatLng? _puntoGpsVisual;
+
+  StreamSubscription<Position>? _streamPosicion;
+
+  Timer? _timerAnimacionGps;
+
+  bool _obteniendoUbicacion = false;
+
+  bool _actualizacionContinua = false;
+
+  bool _seguirUsuario = false;
+
+  bool _actualizandoMarcadorGps = false;
+
+  DateTime? _ultimaActualizacionCamara;
+
+  static const int _duracionAnimacionGpsMs = 450;
+
+  static const int _fpsMarcadorGps = 30;
+
+  static const int _intervaloCamaraGpsMs = 350;
 
   // ============================================================
   // RUTA
   // ============================================================
 
-  bool _rutaCreada =
-      false;
+  bool _rutaCreada = false;
 
-  bool _calculandoRuta =
-      false;
+  bool _calculandoRuta = false;
 
   Emprendimiento? _destinoActual;
 
@@ -176,8 +204,10 @@ class _MapaScreenState extends State<MapaScreen> {
 
   double? _duracionRuta;
 
+  Map<String, dynamic>? _geoJsonRutaActual;
+
   // ============================================================
-  // CONTROL DE TAPS EN MÓVIL
+  // TAPS
   // ============================================================
 
   bool _abriendoEmprendimiento = false;
@@ -195,18 +225,28 @@ class _MapaScreenState extends State<MapaScreen> {
     super.initState();
 
     _cargarGeoJson();
-
     _cargarEmprendimientos();
   }
 
   // ============================================================
-  // GEOJSON ADMIN
+  // DISPOSE
+  // ============================================================
+
+  @override
+  void dispose() {
+    _streamPosicion?.cancel();
+    _timerAnimacionGps?.cancel();
+
+    super.dispose();
+  }
+
+  // ============================================================
+  // GEOJSON
   // ============================================================
 
   Future<void> _cargarGeoJson() async {
     try {
-      final textos =
-          await Future.wait(
+      final textos = await Future.wait(
         [
           rootBundle.loadString(
             'assets/mapas/SV-Map-ADM0.geojson',
@@ -223,28 +263,23 @@ class _MapaScreenState extends State<MapaScreen> {
         ],
       );
 
-      _admin0 =
-          jsonDecode(
+      _admin0 = jsonDecode(
         textos[0],
       );
 
-      _admin1 =
-          jsonDecode(
+      _admin1 = jsonDecode(
         textos[1],
       );
 
-      _admin2 =
-          jsonDecode(
+      _admin2 = jsonDecode(
         textos[2],
       );
 
-      _admin3 =
-          jsonDecode(
+      _admin3 = jsonDecode(
         textos[3],
       );
 
-      _mascara =
-          _crearMascara(
+      _mascara = _crearMascara(
         _admin0!,
       );
 
@@ -253,11 +288,8 @@ class _MapaScreenState extends State<MapaScreen> {
       }
 
       setState(() {
-        _geoJsonCargado =
-            true;
-
-        _error =
-            null;
+        _geoJsonCargado = true;
+        _error = null;
       });
 
       if (_estiloCargado) {
@@ -286,20 +318,16 @@ class _MapaScreenState extends State<MapaScreen> {
   Map<String, dynamic> _crearMascara(
     Map<String, dynamic> admin0,
   ) {
-    final List<dynamic> huecos =
-        [];
+    final List<dynamic> huecos = [];
 
-    final features =
-        admin0['features'];
+    final features = admin0['features'];
 
     if (features is List) {
-      for (final feature
-          in features) {
+      for (final feature in features) {
         final geometry =
             feature['geometry'];
 
-        if (geometry ==
-            null) {
+        if (geometry == null) {
           continue;
         }
 
@@ -309,20 +337,15 @@ class _MapaScreenState extends State<MapaScreen> {
                 '';
 
         final coordinates =
-            geometry[
-                'coordinates'];
+            geometry['coordinates'];
 
-        if (tipo ==
-                'Polygon' &&
-            coordinates
-                is List &&
-            coordinates
-                .isNotEmpty) {
+        if (tipo == 'Polygon' &&
+            coordinates is List &&
+            coordinates.isNotEmpty) {
           final exterior =
               coordinates[0];
 
-          if (exterior
-              is List) {
+          if (exterior is List) {
             huecos.add(
               exterior.reversed
                   .toList(),
@@ -330,21 +353,14 @@ class _MapaScreenState extends State<MapaScreen> {
           }
         }
 
-        if (tipo ==
-                'MultiPolygon' &&
-            coordinates
-                is List) {
-          for (final polygon
-              in coordinates) {
-            if (polygon
-                    is List &&
-                polygon
-                    .isNotEmpty &&
-                polygon[0]
-                    is List) {
+        if (tipo == 'MultiPolygon' &&
+            coordinates is List) {
+          for (final polygon in coordinates) {
+            if (polygon is List &&
+                polygon.isNotEmpty &&
+                polygon[0] is List) {
               huecos.add(
-                (polygon[0]
-                        as List)
+                (polygon[0] as List)
                     .reversed
                     .toList(),
               );
@@ -363,21 +379,14 @@ class _MapaScreenState extends State<MapaScreen> {
     ];
 
     return {
-      'type':
-          'FeatureCollection',
-
+      'type': 'FeatureCollection',
       'features': [
         {
-          'type':
-              'Feature',
-
+          'type': 'Feature',
           'properties':
               <String, dynamic>{},
-
           'geometry': {
-            'type':
-                'Polygon',
-
+            'type': 'Polygon',
             'coordinates': [
               exterior,
               ...huecos,
@@ -389,7 +398,7 @@ class _MapaScreenState extends State<MapaScreen> {
   }
 
   // ============================================================
-  // CARGAR EMPRENDIMIENTOS
+  // EMPRENDIMIENTOS
   // ============================================================
 
   Future<void>
@@ -414,67 +423,34 @@ class _MapaScreenState extends State<MapaScreen> {
         return;
       }
 
-      if (resultado['success'] ==
-          true) {
-        final dynamic raw =
-            resultado[
-                'emprendimientos'];
+      if (resultado['success'] == true) {
+        final raw =
+            resultado['emprendimientos'];
 
         if (raw is List) {
-          final lista =
-              raw
-                  .whereType<
-                      Emprendimiento>()
-                  .toList();
+          final lista = raw
+              .whereType<Emprendimiento>()
+              .where(
+                (e) =>
+                    e.latitud != null &&
+                    e.longitud != null,
+              )
+              .toList();
 
           setState(() {
             _emprendimientos =
-                lista.where(
-              (e) =>
-                  e.latitud !=
-                      null &&
-                  e.longitud !=
-                      null,
-            ).toList();
+                lista;
           });
-
-          debugPrint(
-            '================================',
-          );
-
-          debugPrint(
-            'EMPRENDIMIENTOS CON UBICACIÓN: '
-            '${_emprendimientos.length}',
-          );
-
-          for (final tienda
-              in _emprendimientos) {
-            debugPrint(
-              '${tienda.id} - '
-              '${tienda.nombre} - '
-              '${tienda.latitud}, '
-              '${tienda.longitud}',
-            );
-          }
-
-          debugPrint(
-            '================================',
-          );
 
           if (_estiloCargado &&
               _iconoTiendaCargado) {
             await _dibujarEmprendimientos();
           }
         }
-      } else {
-        debugPrint(
-          'Error listando tiendas: '
-          '${resultado['message']}',
-        );
       }
     } catch (e) {
       debugPrint(
-        'ERROR CARGANDO TIENDAS: $e',
+        'ERROR CARGANDO EMPRENDIMIENTOS: $e',
       );
     } finally {
       if (mounted) {
@@ -493,8 +469,7 @@ class _MapaScreenState extends State<MapaScreen> {
   void _onMapCreated(
     MapLibreMapController controller,
   ) {
-    _mapController =
-        controller;
+    _mapController = controller;
 
     controller.onFeatureTapped.add(
       _onFeatureTapped,
@@ -502,7 +477,7 @@ class _MapaScreenState extends State<MapaScreen> {
   }
 
   // ============================================================
-  // TAP DIRECTO SOBRE EMPRENDIMIENTO
+  // FEATURE TAP
   // ============================================================
 
   void _onFeatureTapped(
@@ -512,21 +487,17 @@ class _MapaScreenState extends State<MapaScreen> {
     String layerId,
     Annotation? annotation,
   ) {
-    debugPrint(
-      'FEATURE TAP -> id=$id layer=$layerId',
-    );
-
-    if (layerId != _layerEmprendimientos) {
+    if (layerId !=
+        _layerEmprendimientos) {
       return;
     }
 
-    final int? emprendimientoId =
-        int.tryParse(id);
+    final emprendimientoId =
+        int.tryParse(
+      id,
+    );
 
     if (emprendimientoId == null) {
-      debugPrint(
-        'ID inválido recibido desde onFeatureTapped: $id',
-      );
       return;
     }
 
@@ -536,18 +507,15 @@ class _MapaScreenState extends State<MapaScreen> {
   }
 
   // ============================================================
-  // TAP GENERAL DEL MAPA
-  //
-  // Respaldo para Android/iOS. Si el callback específico de
-  // la capa no dispara, consultamos manualmente qué feature
-  // quedó debajo del dedo.
+  // MAP CLICK
   // ============================================================
 
   Future<void> _onMapClick(
     Point<double> point,
     LatLng coordinates,
   ) async {
-    final controller = _mapController;
+    final controller =
+        _mapController;
 
     if (controller == null ||
         !_capaEmprendimientosCargada) {
@@ -555,8 +523,9 @@ class _MapaScreenState extends State<MapaScreen> {
     }
 
     try {
-      final List<dynamic> features =
-          await controller.queryRenderedFeatures(
+      final features =
+          await controller
+              .queryRenderedFeatures(
         point,
         const [
           _layerEmprendimientos,
@@ -564,89 +533,82 @@ class _MapaScreenState extends State<MapaScreen> {
         null,
       );
 
-      if (features.isEmpty) {
-        return;
-      }
-
-      for (final dynamic rawFeature in features) {
+      for (final rawFeature in features) {
         if (rawFeature is! Map) {
           continue;
         }
 
-        final Map<String, dynamic> feature =
+        final feature =
             Map<String, dynamic>.from(
           rawFeature,
         );
 
         int? emprendimientoId;
 
-        // En la mayoría de plataformas viene como Feature.id.
-        final dynamic rawId =
-            feature['id'];
+        final id = feature['id'];
 
-        if (rawId != null) {
+        if (id != null) {
           emprendimientoId =
               int.tryParse(
-            rawId.toString(),
+            id.toString(),
           );
         }
 
-        // Respaldo por si la plataforma devuelve solo properties.
-        if (emprendimientoId == null) {
-          final dynamic rawProperties =
+        if (emprendimientoId ==
+            null) {
+          final propiedades =
               feature['properties'];
 
-          if (rawProperties is Map) {
-            final properties =
+          if (propiedades is Map) {
+            final p =
                 Map<String, dynamic>.from(
-              rawProperties,
+              propiedades,
             );
 
-            final dynamic rawPropId =
-                properties['emprendimiento_id'];
-
-            if (rawPropId != null) {
-              emprendimientoId =
-                  int.tryParse(
-                rawPropId.toString(),
-              );
-            }
+            emprendimientoId =
+                int.tryParse(
+              p['emprendimiento_id']
+                      ?.toString() ??
+                  '',
+            );
           }
         }
 
-        if (emprendimientoId != null) {
+        if (emprendimientoId !=
+            null) {
           await _abrirEmprendimientoPorId(
             emprendimientoId,
           );
+
           return;
         }
       }
     } catch (e) {
       debugPrint(
-        'ERROR TAP RESPALDO MAPA: $e',
+        'ERROR TAP MAPA: $e',
       );
     }
   }
 
   // ============================================================
   // ABRIR EMPRENDIMIENTO
-  //
-  // Evita que onFeatureTapped + onMapClick abran dos veces
-  // el mismo BottomSheet.
   // ============================================================
 
-  Future<void> _abrirEmprendimientoPorId(
+  Future<void>
+      _abrirEmprendimientoPorId(
     int id,
   ) async {
     if (!mounted) {
       return;
     }
 
-    final DateTime ahora =
+    final ahora =
         DateTime.now();
 
-    if (_ultimoEmprendimientoTocado == id &&
-        _ultimoTapEmprendimiento != null &&
+    if (_ultimoEmprendimientoTocado ==
+            id &&
+        _ultimoTapEmprendimiento !=
+            null &&
         ahora
                 .difference(
                   _ultimoTapEmprendimiento!,
@@ -662,7 +624,8 @@ class _MapaScreenState extends State<MapaScreen> {
 
     Emprendimiento? seleccionado;
 
-    for (final tienda in _emprendimientos) {
+    for (final tienda
+        in _emprendimientos) {
       if (tienda.id == id) {
         seleccionado = tienda;
         break;
@@ -670,26 +633,25 @@ class _MapaScreenState extends State<MapaScreen> {
     }
 
     if (seleccionado == null) {
-      debugPrint(
-        'NO SE ENCONTRÓ EMPRENDIMIENTO ID $id',
-      );
       return;
     }
 
-    _ultimoEmprendimientoTocado = id;
-    _ultimoTapEmprendimiento = ahora;
-    _abriendoEmprendimiento = true;
+    _ultimoEmprendimientoTocado =
+        id;
 
-    debugPrint(
-      'TIENDA SELECCIONADA: ${seleccionado.nombre}',
-    );
+    _ultimoTapEmprendimiento =
+        ahora;
+
+    _abriendoEmprendimiento =
+        true;
 
     try {
       await _mostrarOpcionesEmprendimiento(
         seleccionado,
       );
     } finally {
-      _abriendoEmprendimiento = false;
+      _abriendoEmprendimiento =
+          false;
     }
   }
 
@@ -699,56 +661,122 @@ class _MapaScreenState extends State<MapaScreen> {
 
   Future<void>
       _onStyleLoaded() async {
-    _capasCargadas =
-        false;
+    _capasCargadas = false;
 
-    _rutaCreada =
-        false;
+    _marcadorUsuario = null;
 
-    _marcadorUsuario =
-        null;
-
-    _iconoTiendaCargado =
-        false;
+    _iconoTiendaCargado = false;
 
     _capaEmprendimientosCargada =
         false;
+
+    _rutaCreada = false;
 
     if (!mounted) {
       return;
     }
 
     setState(() {
-      _estiloCargado =
-          true;
+      _estiloCargado = true;
     });
 
     if (_geoJsonCargado) {
       await _agregarCapas();
     }
 
-    // Primero cargamos el icono.
     await _cargarIconoTienda();
 
-    // Luego las tiendas.
     await _dibujarEmprendimientos();
 
-    if (_posicionUsuario !=
-        null) {
-      await _dibujarUbicacion(
-        _posicionUsuario!,
-        centrar: false,
+    if (_geoJsonRutaActual != null) {
+      await _dibujarRuta(
+        _geoJsonRutaActual!,
       );
     }
 
-    await _centrarElSalvador();
+    if (_puntoGpsVisual != null) {
+      await _actualizarMarcadorGps(
+        _puntoGpsVisual!,
+      );
+    } else if (_posicionUsuario !=
+        null) {
+      final punto = LatLng(
+        _posicionUsuario!.latitude,
+        _posicionUsuario!.longitude,
+      );
+
+      _puntoGpsVisual = punto;
+
+      await _actualizarMarcadorGps(
+        punto,
+      );
+    }
+
+    if (_primeraCargaEstilo) {
+      _primeraCargaEstilo =
+          false;
+    } else {
+      await _restaurarCamara();
+    }
   }
 
   // ============================================================
-  // CARGAR ICONO TIENDA
-  //
-  // REDIMENSIONAMOS EL PNG ANTES DE ENTREGARLO A MAPLIBRE.
-  // ESTO CORRIGE EL MARCADOR INVISIBLE EN WEB.
+  // CÁMARA PROGRAMÁTICA
+  // ============================================================
+
+  Future<void> _animarCamara(
+    CameraUpdate update,
+  ) async {
+    final controller =
+        _mapController;
+
+    if (controller == null) {
+      return;
+    }
+
+    _moviendoCamaraProgramaticamente =
+        true;
+
+    try {
+      await controller.animateCamera(
+        update,
+      );
+
+      await Future<void>.delayed(
+        const Duration(
+          milliseconds: 70,
+        ),
+      );
+    } catch (e) {
+      debugPrint(
+        'ERROR MOVIENDO CÁMARA: $e',
+      );
+    } finally {
+      _moviendoCamaraProgramaticamente =
+          false;
+    }
+  }
+
+  Future<void>
+      _restaurarCamara() async {
+    await _animarCamara(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target:
+              _centroCamaraActual,
+          zoom:
+              _zoomActual,
+          bearing:
+              _bearingActual,
+          tilt:
+              _tiltActual,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // ICONO TIENDA
   // ============================================================
 
   Future<void>
@@ -756,8 +784,7 @@ class _MapaScreenState extends State<MapaScreen> {
     final controller =
         _mapController;
 
-    if (controller ==
-            null ||
+    if (controller == null ||
         _iconoTiendaCargado) {
       return;
     }
@@ -766,120 +793,69 @@ class _MapaScreenState extends State<MapaScreen> {
     ui.Image? imagen;
 
     try {
-      // ========================================================
-      // PNG ORIGINAL
-      // ========================================================
-
       final ByteData data =
           await rootBundle.load(
         'assets/mapas/marcador_tienda.png',
       );
 
-      final Uint8List
-          bytesOriginales =
+      final Uint8List bytes =
           data.buffer.asUint8List(
         data.offsetInBytes,
         data.lengthInBytes,
       );
 
-      debugPrint(
-        'Marcador original: '
-        '${bytesOriginales.length} bytes',
-      );
-
-      // ========================================================
-      // REDIMENSIONAR
-      //
-      // Dejamos el marcador en 96px de ancho.
-      // La altura se calcula automáticamente.
-      // ========================================================
-
       codec =
           await ui.instantiateImageCodec(
-        bytesOriginales,
-        targetWidth:
-            96,
+        bytes,
+        targetWidth: 96,
       );
 
-      final ui.FrameInfo frame =
+      final frame =
           await codec.getNextFrame();
 
-      imagen =
-          frame.image;
+      imagen = frame.image;
 
-      debugPrint(
-        'Marcador redimensionado: '
-        '${imagen.width}x${imagen.height}',
-      );
-
-      // ========================================================
-      // CONVERTIR A PNG
-      // ========================================================
-
-      final ByteData? pngData =
+      final pngData =
           await imagen.toByteData(
         format:
             ui.ImageByteFormat.png,
       );
 
-      if (pngData ==
-          null) {
-        throw Exception(
-          'No se pudo convertir el marcador a PNG',
-        );
+      if (pngData == null) {
+        return;
       }
 
-      final Uint8List bytesFinales =
+      final bytesFinales =
           pngData.buffer.asUint8List(
         pngData.offsetInBytes,
         pngData.lengthInBytes,
       );
-
-      // ========================================================
-      // REGISTRAR EN MAPLIBRE
-      // ========================================================
 
       await controller.addImage(
         _iconoTienda,
         bytesFinales,
       );
 
-      _iconoTiendaCargado =
-          true;
-
-      debugPrint(
-        '✓ ICONO TIENDA REGISTRADO EN MAPLIBRE',
-      );
+      _iconoTiendaCargado = true;
     } catch (e) {
-      _iconoTiendaCargado =
-          false;
-
       debugPrint(
-        'ERROR ICONO TIENDA: $e',
+        'ERROR ICONO: $e',
       );
-
-      if (mounted) {
-        _mostrarMensaje(
-          'No se pudo cargar el marcador de las tiendas',
-        );
-      }
     } finally {
       imagen?.dispose();
-
       codec?.dispose();
     }
   }
 
   // ============================================================
-  // CAPAS ADMIN
+  // CAPAS
   // ============================================================
 
   Future<void> _agregarCapas() async {
     final controller =
         _mapController;
 
-    if (controller ==
-            null ||
+    if (controller == null ||
         _capasCargadas ||
         !_geoJsonCargado) {
       return;
@@ -916,10 +892,6 @@ class _MapaScreenState extends State<MapaScreen> {
         _admin3!,
       );
 
-      // ========================================================
-      // MÁSCARA
-      // ========================================================
-
       await controller.addFillLayer(
         'merc-mask',
         'merc-mask-layer',
@@ -928,10 +900,7 @@ class _MapaScreenState extends State<MapaScreen> {
               oscuro
                   ? '#171320'
                   : '#FFF6ED',
-
-          fillOpacity:
-              1.0,
-
+          fillOpacity: 1,
           fillOutlineColor:
               oscuro
                   ? '#171320'
@@ -939,109 +908,62 @@ class _MapaScreenState extends State<MapaScreen> {
         ),
       );
 
-      // ========================================================
-      // TINTE
-      // ========================================================
-
       await controller.addFillLayer(
         'merc-admin0',
         'merc-orange-overlay',
         const FillLayerProperties(
-          fillColor:
-              '#FF7E01',
-
-          fillOpacity:
-              0.035,
+          fillColor: '#FF7E01',
+          fillOpacity: 0.035,
         ),
       );
-
-      // ========================================================
-      // ADMIN3
-      // ========================================================
 
       await controller.addLineLayer(
         'merc-admin3',
         'merc-admin3-line',
         const LineLayerProperties(
-          lineColor:
-              '#FFC078',
-
-          lineOpacity:
-              0.65,
-
-          lineWidth:
-              0.65,
+          lineColor: '#FFC078',
+          lineOpacity: 0.65,
+          lineWidth: 0.65,
         ),
-        minzoom:
-            13,
+        minzoom: 13,
       );
-
-      // ========================================================
-      // ADMIN2
-      // ========================================================
 
       await controller.addLineLayer(
         'merc-admin2',
         'merc-admin2-line',
         const LineLayerProperties(
-          lineColor:
-              '#FF9A3D',
-
-          lineOpacity:
-              0.78,
-
-          lineWidth:
-              1,
+          lineColor: '#FF9A3D',
+          lineOpacity: 0.78,
+          lineWidth: 1,
         ),
-        minzoom:
-            10,
+        minzoom: 10,
       );
-
-      // ========================================================
-      // ADMIN1
-      // ========================================================
 
       await controller.addLineLayer(
         'merc-admin1',
         'merc-admin1-line',
         const LineLayerProperties(
-          lineColor:
-              '#FF7E01',
-
-          lineOpacity:
-              0.9,
-
-          lineWidth:
-              1.5,
+          lineColor: '#FF7E01',
+          lineOpacity: 0.9,
+          lineWidth: 1.5,
         ),
-        minzoom:
-            7.5,
+        minzoom: 7.5,
       );
-
-      // ========================================================
-      // ADMIN0
-      // ========================================================
 
       await controller.addLineLayer(
         'merc-admin0',
         'merc-admin0-line',
         const LineLayerProperties(
-          lineColor:
-              '#C95400',
-
-          lineOpacity:
-              1,
-
-          lineWidth:
-              3,
+          lineColor: '#C95400',
+          lineOpacity: 1,
+          lineWidth: 3,
         ),
       );
 
-      _capasCargadas =
-          true;
+      _capasCargadas = true;
     } catch (e) {
       debugPrint(
-        'ERROR CAPAS ADMIN: $e',
+        'ERROR CAPAS: $e',
       );
     }
   }
@@ -1055,8 +977,7 @@ class _MapaScreenState extends State<MapaScreen> {
     final controller =
         _mapController;
 
-    if (controller ==
-            null ||
+    if (controller == null ||
         !_estiloCargado ||
         !_iconoTiendaCargado) {
       return;
@@ -1068,69 +989,41 @@ class _MapaScreenState extends State<MapaScreen> {
 
       for (final emprendimiento
           in _emprendimientos) {
-        if (emprendimiento
-                    .latitud ==
+        if (emprendimiento.latitud ==
                 null ||
-            emprendimiento
-                    .longitud ==
+            emprendimiento.longitud ==
                 null) {
           continue;
         }
 
         features.add({
-          'type':
-              'Feature',
-
-          // Este ID es el que devuelve
-          // onFeatureTapped.
+          'type': 'Feature',
           'id':
-              emprendimiento.id
-                  .toString(),
-
+              emprendimiento.id.toString(),
           'properties': {
-            'tipo':
-                'emprendimiento',
-
+            'tipo': 'emprendimiento',
             'nombre':
-                emprendimiento
-                    .nombre,
-
+                emprendimiento.nombre,
             'emprendimiento_id':
-                emprendimiento
-                    .id,
+                emprendimiento.id,
           },
-
           'geometry': {
-            'type':
-                'Point',
-
+            'type': 'Point',
             'coordinates': [
-              emprendimiento
-                  .longitud!,
-              emprendimiento
-                  .latitud!,
+              emprendimiento.longitud!,
+              emprendimiento.latitud!,
             ],
           },
         });
       }
 
-      final Map<String, dynamic>
-          geojson = {
+      final geojson =
+          <String, dynamic>{
         'type':
             'FeatureCollection',
-
         'features':
             features,
       };
-
-      debugPrint(
-        'FEATURES EMPRENDIMIENTOS: '
-        '${features.length}',
-      );
-
-      // ========================================================
-      // SI YA EXISTE, ACTUALIZAR
-      // ========================================================
 
       if (_capaEmprendimientosCargada) {
         await controller
@@ -1139,86 +1032,52 @@ class _MapaScreenState extends State<MapaScreen> {
           geojson,
         );
 
-        debugPrint(
-          '✓ SOURCE TIENDAS ACTUALIZADO',
-        );
-
         return;
       }
 
-      // ========================================================
-      // SOURCE
-      // ========================================================
-
-      await controller
-          .addGeoJsonSource(
+      await controller.addGeoJsonSource(
         _sourceEmprendimientos,
         geojson,
       );
 
-      // ========================================================
-      // SYMBOL LAYER
-      // ========================================================
-
-      await controller
-          .addSymbolLayer(
+      await controller.addSymbolLayer(
         _sourceEmprendimientos,
         _layerEmprendimientos,
         const SymbolLayerProperties(
           iconImage:
               _iconoTienda,
-
-          // El PNG ya está reducido
-          // a 96px.
-          //
-          // 0.85 deja un tamaño claro
-          // y visible.
           iconSize:
               0.85,
-
-          // La punta inferior del pin
-          // coincide con la coordenada.
           iconAnchor:
               'bottom',
-
-          // Nunca ocultar el marcador
-          // por colisiones con textos.
           iconAllowOverlap:
               true,
-
           iconIgnorePlacement:
               true,
-
           iconOptional:
               false,
-
           iconOpacity:
-              1.0,
+              1,
         ),
-
-        // Necesario para recibir taps.
         enableInteraction:
             true,
       );
 
       _capaEmprendimientosCargada =
           true;
-
-      debugPrint(
-        '✓ CAPA EMPRENDIMIENTOS CREADA',
-      );
     } catch (e) {
       debugPrint(
-        'ERROR DIBUJANDO TIENDAS: $e',
+        'ERROR TIENDAS: $e',
       );
     }
   }
 
   // ============================================================
-  // OPCIONES DEL EMPRENDIMIENTO
+  // MODAL EMPRENDIMIENTO
   // ============================================================
 
-  Future<void> _mostrarOpcionesEmprendimiento(
+  Future<void>
+      _mostrarOpcionesEmprendimiento(
     Emprendimiento emprendimiento,
   ) async {
     if (!mounted) {
@@ -1226,17 +1085,10 @@ class _MapaScreenState extends State<MapaScreen> {
     }
 
     await showModalBottomSheet(
-      context:
-          context,
-
-      showDragHandle:
-          true,
-
-      isScrollControlled:
-          true,
-
-      builder:
-          (bottomContext) {
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (bottomContext) {
         return SafeArea(
           child: Padding(
             padding:
@@ -1246,39 +1098,27 @@ class _MapaScreenState extends State<MapaScreen> {
               20,
               24,
             ),
-
             child: Column(
               mainAxisSize:
                   MainAxisSize.min,
-
               crossAxisAlignment:
-                  CrossAxisAlignment
-                      .stretch,
-
+                  CrossAxisAlignment.stretch,
               children: [
                 Row(
                   children: [
                     Container(
-                      width:
-                          64,
-
-                      height:
-                          64,
-
+                      width: 64,
+                      height: 64,
                       decoration:
                           BoxDecoration(
                         color:
                             _naranjaPrincipal,
-
                         borderRadius:
-                            BorderRadius
-                                .circular(
+                            BorderRadius.circular(
                           18,
                         ),
-
                         image:
-                            emprendimiento
-                                            .imagenUrl !=
+                            emprendimiento.imagenUrl !=
                                         null &&
                                     emprendimiento
                                         .imagenUrl!
@@ -1294,10 +1134,8 @@ class _MapaScreenState extends State<MapaScreen> {
                                   )
                                 : null,
                       ),
-
                       child:
-                          emprendimiento
-                                          .imagenUrl ==
+                          emprendimiento.imagenUrl ==
                                       null ||
                                   emprendimiento
                                       .imagenUrl!
@@ -1306,93 +1144,64 @@ class _MapaScreenState extends State<MapaScreen> {
                                   Icons.storefront,
                                   color:
                                       Colors.white,
-                                  size:
-                                      34,
+                                  size: 34,
                                 )
                               : null,
                     ),
-
                     const SizedBox(
-                      width:
-                          14,
+                      width: 14,
                     ),
-
                     Expanded(
                       child: Column(
                         crossAxisAlignment:
-                            CrossAxisAlignment
-                                .start,
-
+                            CrossAxisAlignment.start,
                         children: [
                           Text(
-                            emprendimiento
-                                .nombre,
-
+                            emprendimiento.nombre,
                             style:
                                 const TextStyle(
-                              fontSize:
-                                  19,
-
+                              fontSize: 19,
                               fontWeight:
                                   FontWeight.bold,
                             ),
                           ),
-
-                          if (emprendimiento
-                                      .descripcion !=
+                          if (emprendimiento.descripcion !=
                                   null &&
                               emprendimiento
                                   .descripcion!
                                   .isNotEmpty) ...[
                             const SizedBox(
-                              height:
-                                  4,
+                              height: 4,
                             ),
-
                             Text(
                               emprendimiento
                                   .descripcion!,
-
-                              maxLines:
-                                  2,
-
+                              maxLines: 2,
                               overflow:
-                                  TextOverflow
-                                      .ellipsis,
+                                  TextOverflow.ellipsis,
                             ),
                           ],
-
                           const SizedBox(
-                            height:
-                                6,
+                            height: 6,
                           ),
-
                           const Row(
                             children: [
                               Icon(
                                 Icons.location_on,
                                 color:
                                     _naranjaPrincipal,
-                                size:
-                                    16,
+                                size: 16,
                               ),
-
                               SizedBox(
-                                width:
-                                    4,
+                                width: 4,
                               ),
-
                               Text(
                                 'Ubicación disponible',
-
                                 style:
                                     TextStyle(
                                   color:
                                       _naranjaPrincipal,
-
-                                  fontSize:
-                                      12,
-
+                                  fontSize: 12,
                                   fontWeight:
                                       FontWeight.w600,
                                 ),
@@ -1404,24 +1213,14 @@ class _MapaScreenState extends State<MapaScreen> {
                     ),
                   ],
                 ),
-
                 const SizedBox(
-                  height:
-                      24,
+                  height: 24,
                 ),
-
-                // =================================================
-                // PERFIL
-                // =================================================
-
                 SizedBox(
-                  height:
-                      50,
-
+                  height: 50,
                   child:
                       OutlinedButton.icon(
-                    onPressed:
-                        () {
+                    onPressed: () {
                       Navigator.pop(
                         bottomContext,
                       );
@@ -1430,47 +1229,30 @@ class _MapaScreenState extends State<MapaScreen> {
                         emprendimiento,
                       );
                     },
-
-                    icon:
-                        const Icon(
+                    icon: const Icon(
                       Icons
                           .storefront_outlined,
                     ),
-
-                    label:
-                        const Text(
+                    label: const Text(
                       'Ver perfil del emprendimiento',
                     ),
                   ),
                 ),
-
                 const SizedBox(
-                  height:
-                      12,
+                  height: 12,
                 ),
-
-                // =================================================
-                // RUTA
-                // =================================================
-
                 SizedBox(
-                  height:
-                      50,
-
+                  height: 50,
                   child:
                       FilledButton.icon(
                     style:
-                        FilledButton
-                            .styleFrom(
+                        FilledButton.styleFrom(
                       backgroundColor:
                           _verdeRuta,
-
                       foregroundColor:
                           Colors.white,
                     ),
-
-                    onPressed:
-                        () {
+                    onPressed: () {
                       Navigator.pop(
                         bottomContext,
                       );
@@ -1479,14 +1261,10 @@ class _MapaScreenState extends State<MapaScreen> {
                         emprendimiento,
                       );
                     },
-
-                    icon:
-                        const Icon(
+                    icon: const Icon(
                       Icons.route,
                     ),
-
-                    label:
-                        const Text(
+                    label: const Text(
                       'Marcar ruta',
                     ),
                   ),
@@ -1507,17 +1285,10 @@ class _MapaScreenState extends State<MapaScreen> {
     Emprendimiento emprendimiento,
   ) {
     showModalBottomSheet(
-      context:
-          context,
-
-      showDragHandle:
-          true,
-
-      isScrollControlled:
-          true,
-
-      builder:
-          (perfilContext) {
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (perfilContext) {
         return SafeArea(
           child:
               SingleChildScrollView(
@@ -1525,119 +1296,87 @@ class _MapaScreenState extends State<MapaScreen> {
                 const EdgeInsets.all(
               24,
             ),
-
             child: Column(
               mainAxisSize:
                   MainAxisSize.min,
-
               children: [
                 CircleAvatar(
-                  radius:
-                      52,
-
+                  radius: 52,
                   backgroundColor:
                       _naranjaPrincipal,
-
                   backgroundImage:
-                      emprendimiento
-                                  .imagenUrl !=
-                              null &&
-                          emprendimiento
-                              .imagenUrl!
-                              .isNotEmpty
+                      emprendimiento.imagenUrl !=
+                                  null &&
+                              emprendimiento
+                                  .imagenUrl!
+                                  .isNotEmpty
                           ? NetworkImage(
                               emprendimiento
                                   .imagenUrl!,
                             )
                           : null,
-
                   child:
-                      emprendimiento
-                                  .imagenUrl ==
-                              null ||
-                          emprendimiento
-                              .imagenUrl!
-                              .isEmpty
+                      emprendimiento.imagenUrl ==
+                                  null ||
+                              emprendimiento
+                                  .imagenUrl!
+                                  .isEmpty
                           ? const Icon(
-                              Icons
-                                  .storefront,
-
-                              size:
-                                  50,
-
+                              Icons.storefront,
+                              size: 50,
                               color:
                                   Colors.white,
                             )
                           : null,
                 ),
-
                 const SizedBox(
-                  height:
-                      16,
+                  height: 16,
                 ),
-
                 Text(
                   emprendimiento.nombre,
-
                   textAlign:
                       TextAlign.center,
-
                   style:
                       const TextStyle(
-                    fontSize:
-                        22,
-
+                    fontSize: 22,
                     fontWeight:
                         FontWeight.bold,
                   ),
                 ),
-
-                if (emprendimiento
-                            .descripcion !=
+                if (emprendimiento.descripcion !=
                         null &&
                     emprendimiento
                         .descripcion!
                         .isNotEmpty) ...[
                   const SizedBox(
-                    height:
-                        12,
+                    height: 12,
                   ),
-
                   Text(
                     emprendimiento
                         .descripcion!,
-
                     textAlign:
                         TextAlign.center,
                   ),
                 ],
-
-                if (emprendimiento
-                            .telefono !=
+                if (emprendimiento.telefono !=
                         null &&
                     emprendimiento
                         .telefono!
                         .isNotEmpty) ...[
                   const SizedBox(
-                    height:
-                        15,
+                    height: 15,
                   ),
-
                   ListTile(
                     leading:
                         const Icon(
-                      Icons
-                          .phone_outlined,
-
+                      Icons.phone_outlined,
                       color:
                           _naranjaPrincipal,
                     ),
-
                     title:
                         const Text(
                       'Teléfono',
                     ),
-
                     subtitle:
                         Text(
                       emprendimiento
@@ -1645,9 +1384,7 @@ class _MapaScreenState extends State<MapaScreen> {
                     ),
                   ),
                 ],
-
-                if (emprendimiento
-                            .correoContacto !=
+                if (emprendimiento.correoContacto !=
                         null &&
                     emprendimiento
                         .correoContacto!
@@ -1655,51 +1392,37 @@ class _MapaScreenState extends State<MapaScreen> {
                   ListTile(
                     leading:
                         const Icon(
-                      Icons
-                          .email_outlined,
-
+                      Icons.email_outlined,
                       color:
                           _naranjaPrincipal,
                     ),
-
                     title:
                         const Text(
                       'Correo de contacto',
                     ),
-
                     subtitle:
                         Text(
                       emprendimiento
                           .correoContacto!,
                     ),
                   ),
-
                 const SizedBox(
-                  height:
-                      16,
+                  height: 16,
                 ),
-
                 SizedBox(
                   width:
                       double.infinity,
-
-                  height:
-                      50,
-
+                  height: 50,
                   child:
                       FilledButton.icon(
                     style:
-                        FilledButton
-                            .styleFrom(
+                        FilledButton.styleFrom(
                       backgroundColor:
                           _verdeRuta,
-
                       foregroundColor:
                           Colors.white,
                     ),
-
-                    onPressed:
-                        () {
+                    onPressed: () {
                       Navigator.pop(
                         perfilContext,
                       );
@@ -1708,14 +1431,10 @@ class _MapaScreenState extends State<MapaScreen> {
                         emprendimiento,
                       );
                     },
-
-                    icon:
-                        const Icon(
+                    icon: const Icon(
                       Icons.route,
                     ),
-
-                    label:
-                        const Text(
+                    label: const Text(
                       'Cómo llegar',
                     ),
                   ),
@@ -1781,7 +1500,8 @@ class _MapaScreenState extends State<MapaScreen> {
     const settings =
         LocationSettings(
       accuracy:
-          LocationAccuracy.high,
+          LocationAccuracy
+              .bestForNavigation,
     );
 
     return Geolocator
@@ -1792,12 +1512,58 @@ class _MapaScreenState extends State<MapaScreen> {
   }
 
   // ============================================================
-  // MI UBICACIÓN
+  // GPS
   // ============================================================
 
   Future<void>
       _obtenerMiUbicacion() async {
     if (_obteniendoUbicacion) {
+      return;
+    }
+
+    /*
+     * GPS activo pero el usuario movió el mapa:
+     * vuelve a seguirlo.
+     */
+    if (_actualizacionContinua &&
+        !_seguirUsuario) {
+      final posicion =
+          _posicionUsuario;
+
+      if (posicion != null) {
+        _seguirUsuario = true;
+
+        await _centrarEnUsuario(
+          LatLng(
+            posicion.latitude,
+            posicion.longitude,
+          ),
+          zoom: max(
+            _zoomActual,
+            16,
+          ),
+        );
+
+        if (mounted) {
+          setState(() {});
+        }
+      }
+
+      return;
+    }
+
+    /*
+     * GPS activo y siguiendo:
+     * apagar.
+     */
+    if (_actualizacionContinua &&
+        _seguirUsuario) {
+      await _detenerActualizacionContinua();
+
+      _mostrarMensaje(
+        'Seguimiento GPS detenido',
+      );
+
       return;
     }
 
@@ -1810,24 +1576,38 @@ class _MapaScreenState extends State<MapaScreen> {
       final posicion =
           await _obtenerPosicionParaRuta();
 
-      if (posicion ==
-          null) {
+      if (posicion == null ||
+          !mounted) {
         return;
       }
 
-      if (!mounted) {
-        return;
-      }
+      _posicionUsuario =
+          posicion;
 
-      setState(() {
-        _posicionUsuario =
-            posicion;
-      });
-
-      await _dibujarUbicacion(
-        posicion,
-        centrar: true,
+      final punto = LatLng(
+        posicion.latitude,
+        posicion.longitude,
       );
+
+      _puntoGpsVisual =
+          punto;
+
+      await _actualizarMarcadorGps(
+        punto,
+      );
+
+      _seguirUsuario = true;
+
+      await _centrarEnUsuario(
+        punto,
+        zoom: 17,
+      );
+
+      await _iniciarActualizacionContinua();
+
+      if (mounted) {
+        setState(() {});
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -1838,85 +1618,380 @@ class _MapaScreenState extends State<MapaScreen> {
     }
   }
 
-  // ============================================================
-  // DIBUJAR MI UBICACIÓN
-  // ============================================================
-
-  Future<void> _dibujarUbicacion(
-    Position posicion, {
-    required bool centrar,
+  Future<void> _centrarEnUsuario(
+    LatLng punto, {
+    required double zoom,
   }) async {
-    final controller =
-        _mapController;
+    _centroCamaraActual = punto;
 
-    if (controller ==
-            null ||
+    _zoomActual =
+        zoom
+            .clamp(
+              _zoomMinimo,
+              _zoomMaximo,
+            )
+            .toDouble();
+
+    await _animarCamara(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: punto,
+          zoom: _zoomActual,
+          bearing: _bearingActual,
+          tilt: _tiltActual,
+        ),
+      ),
+    );
+  }
+
+  Future<void>
+      _iniciarActualizacionContinua() async {
+    if (_actualizacionContinua) {
+      return;
+    }
+
+    _actualizacionContinua = true;
+
+    await _iniciarStreamPosicion();
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void>
+      _iniciarStreamPosicion() async {
+    final servicio =
+        await Geolocator
+            .isLocationServiceEnabled();
+
+    if (!servicio) {
+      _actualizacionContinua = false;
+
+      if (mounted) {
+        setState(() {});
+
+        _mostrarDialogoGpsDesactivado();
+      }
+
+      return;
+    }
+
+    await _streamPosicion?.cancel();
+
+    const settings =
+        LocationSettings(
+      accuracy:
+          LocationAccuracy
+              .bestForNavigation,
+      distanceFilter: 1,
+    );
+
+    _streamPosicion =
+        Geolocator
+            .getPositionStream(
+      locationSettings:
+          settings,
+    ).listen(
+      (Position posicion) async {
+        if (!mounted ||
+            !_actualizacionContinua) {
+          return;
+        }
+
+        if (posicion.accuracy >
+            80) {
+          return;
+        }
+
+        _posicionUsuario =
+            posicion;
+
+        await _animarGpsHasta(
+          LatLng(
+            posicion.latitude,
+            posicion.longitude,
+          ),
+        );
+      },
+      onError: (error) {
+        debugPrint(
+          'ERROR GPS STREAM: $error',
+        );
+      },
+      cancelOnError: false,
+    );
+  }
+
+  // ============================================================
+  // ANIMAR GPS
+  // ============================================================
+
+  Future<void> _animarGpsHasta(
+    LatLng destino,
+  ) async {
+    if (!_actualizacionContinua ||
         !_estiloCargado) {
       return;
     }
 
-    final punto =
-        LatLng(
-      posicion.latitude,
-      posicion.longitude,
+    if (_puntoGpsVisual == null) {
+      _puntoGpsVisual = destino;
+
+      await _actualizarMarcadorGps(
+        destino,
+      );
+
+      await _actualizarCamaraGps(
+        destino,
+      );
+
+      return;
+    }
+
+    final origen =
+        _puntoGpsVisual!;
+
+    final distancia =
+        Geolocator.distanceBetween(
+      origen.latitude,
+      origen.longitude,
+      destino.latitude,
+      destino.longitude,
     );
 
+    if (distancia < 0.5) {
+      _puntoGpsVisual = destino;
+
+      await _actualizarMarcadorGps(
+        destino,
+      );
+
+      await _actualizarCamaraGps(
+        destino,
+      );
+
+      return;
+    }
+
+    _timerAnimacionGps?.cancel();
+
+    const int intervaloMs =
+        1000 ~/ _fpsMarcadorGps;
+
+    int transcurrido = 0;
+
+    _timerAnimacionGps =
+        Timer.periodic(
+      const Duration(
+        milliseconds:
+            intervaloMs,
+      ),
+      (timer) async {
+        if (!mounted ||
+            !_actualizacionContinua) {
+          timer.cancel();
+          return;
+        }
+
+        transcurrido +=
+            intervaloMs;
+
+        double t =
+            transcurrido /
+                _duracionAnimacionGpsMs;
+
+        if (t > 1) {
+          t = 1;
+        }
+
+        final suavizado =
+            _easeInOutCubic(
+          t,
+        );
+
+        final punto = LatLng(
+          origen.latitude +
+              ((destino.latitude -
+                      origen.latitude) *
+                  suavizado),
+          origen.longitude +
+              ((destino.longitude -
+                      origen.longitude) *
+                  suavizado),
+        );
+
+        _puntoGpsVisual = punto;
+
+        if (!_actualizandoMarcadorGps) {
+          _actualizandoMarcadorGps =
+              true;
+
+          try {
+            await _actualizarMarcadorGps(
+              punto,
+            );
+
+            await _actualizarCamaraGps(
+              punto,
+            );
+          } finally {
+            _actualizandoMarcadorGps =
+                false;
+          }
+        }
+
+        if (t >= 1) {
+          timer.cancel();
+
+          _puntoGpsVisual = destino;
+
+          if (!_actualizandoMarcadorGps) {
+            _actualizandoMarcadorGps =
+                true;
+
+            try {
+              await _actualizarMarcadorGps(
+                destino,
+              );
+
+              await _actualizarCamaraGps(
+                destino,
+              );
+            } finally {
+              _actualizandoMarcadorGps =
+                  false;
+            }
+          }
+        }
+      },
+    );
+  }
+
+  double _easeInOutCubic(
+    double t,
+  ) {
+    if (t < 0.5) {
+      return 4 * t * t * t;
+    }
+
+    return 1 -
+        pow(
+              -2 * t + 2,
+              3,
+            ) /
+            2;
+  }
+
+  // ============================================================
+  // MARCADOR GPS
+  // ============================================================
+
+  Future<void>
+      _actualizarMarcadorGps(
+    LatLng punto,
+  ) async {
+    final controller =
+        _mapController;
+
+    if (controller == null ||
+        !_estiloCargado) {
+      return;
+    }
+
     try {
-      if (_marcadorUsuario ==
-          null) {
+      if (_marcadorUsuario == null) {
         _marcadorUsuario =
-            await controller
-                .addCircle(
+            await controller.addCircle(
           CircleOptions(
-            geometry:
-                punto,
-
-            circleRadius:
-                9,
-
-            circleColor:
-                '#FF7E01',
-
-            circleStrokeColor:
-                '#FFFFFF',
-
-            circleStrokeWidth:
-                3,
-
-            circleOpacity:
-                1,
+            geometry: punto,
+            circleRadius: 9,
+            circleColor: '#FF7E01',
+            circleStrokeColor: '#FFFFFF',
+            circleStrokeWidth: 3,
+            circleOpacity: 1,
           ),
         );
       } else {
-        await controller
-            .updateCircle(
+        await controller.updateCircle(
           _marcadorUsuario!,
           CircleOptions(
-            geometry:
-                punto,
-          ),
-        );
-      }
-
-      if (centrar) {
-        await controller
-            .animateCamera(
-          CameraUpdate
-              .newLatLngZoom(
-            punto,
-            15,
+            geometry: punto,
           ),
         );
       }
     } catch (e) {
       debugPrint(
-        'ERROR UBICACIÓN: $e',
+        'ERROR MARCADOR GPS: $e',
       );
     }
   }
 
   // ============================================================
-  // MARCAR RUTA
+  // SEGUIR GPS
+  // ============================================================
+
+  Future<void> _actualizarCamaraGps(
+    LatLng punto,
+  ) async {
+    if (!_seguirUsuario) {
+      return;
+    }
+
+    final ahora =
+        DateTime.now();
+
+    if (_ultimaActualizacionCamara !=
+            null &&
+        ahora
+                .difference(
+                  _ultimaActualizacionCamara!,
+                )
+                .inMilliseconds <
+            _intervaloCamaraGpsMs) {
+      return;
+    }
+
+    _ultimaActualizacionCamara =
+        ahora;
+
+    _centroCamaraActual =
+        punto;
+
+    await _animarCamara(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: punto,
+          zoom: _zoomActual,
+          bearing: _bearingActual,
+          tilt: _tiltActual,
+        ),
+      ),
+    );
+  }
+
+  Future<void>
+      _detenerActualizacionContinua() async {
+    _actualizacionContinua = false;
+    _seguirUsuario = false;
+
+    await _streamPosicion?.cancel();
+
+    _streamPosicion = null;
+
+    _timerAnimacionGps?.cancel();
+
+    _timerAnimacionGps = null;
+
+    _ultimaActualizacionCamara = null;
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  // ============================================================
+  // RUTA
   // ============================================================
 
   Future<void> _marcarRuta(
@@ -1926,11 +2001,9 @@ class _MapaScreenState extends State<MapaScreen> {
       return;
     }
 
-    if (emprendimiento
-                .latitud ==
+    if (emprendimiento.latitud ==
             null ||
-        emprendimiento
-                .longitud ==
+        emprendimiento.longitud ==
             null) {
       _mostrarMensaje(
         'Este emprendimiento no tiene ubicación.',
@@ -1940,50 +2013,41 @@ class _MapaScreenState extends State<MapaScreen> {
     }
 
     setState(() {
-      _calculandoRuta =
-          true;
-
-      _destinoActual =
-          emprendimiento;
+      _calculandoRuta = true;
+      _destinoActual = emprendimiento;
     });
 
     try {
       final posicion =
           await _obtenerPosicionParaRuta();
 
-      if (posicion ==
-          null) {
+      if (posicion == null) {
         return;
       }
 
-      _posicionUsuario =
-          posicion;
+      _posicionUsuario = posicion;
 
-      await _dibujarUbicacion(
-        posicion,
-        centrar: false,
-      );
-
-      final origen =
-          LatLng(
+      final origen = LatLng(
         posicion.latitude,
         posicion.longitude,
       );
 
-      final destino =
-          LatLng(
+      final destino = LatLng(
         emprendimiento.latitud!,
         emprendimiento.longitud!,
+      );
+
+      _puntoGpsVisual = origen;
+
+      await _actualizarMarcadorGps(
+        origen,
       );
 
       final resultado =
           await RutaService
               .obtenerRuta(
-        origen:
-            origen,
-
-        destino:
-            destino,
+        origen: origen,
+        destino: destino,
       );
 
       if (resultado['success'] !=
@@ -2003,6 +2067,9 @@ class _MapaScreenState extends State<MapaScreen> {
         resultado['geojson'],
       );
 
+      _geoJsonRutaActual =
+          geojson;
+
       await _dibujarRuta(
         geojson,
       );
@@ -2021,10 +2088,16 @@ class _MapaScreenState extends State<MapaScreen> {
         setState(() {});
       }
 
+      _seguirUsuario = false;
+
       await _encuadrarRuta(
         origen,
         destino,
       );
+
+      if (!_actualizacionContinua) {
+        await _iniciarActualizacionContinua();
+      }
     } catch (e) {
       debugPrint(
         'ERROR RUTA: $e',
@@ -2038,16 +2111,11 @@ class _MapaScreenState extends State<MapaScreen> {
     } finally {
       if (mounted) {
         setState(() {
-          _calculandoRuta =
-              false;
+          _calculandoRuta = false;
         });
       }
     }
   }
-
-  // ============================================================
-  // DIBUJAR RUTA
-  // ============================================================
 
   Future<void> _dibujarRuta(
     Map<String, dynamic> geojson,
@@ -2055,86 +2123,63 @@ class _MapaScreenState extends State<MapaScreen> {
     final controller =
         _mapController;
 
-    if (controller ==
-        null) {
+    if (controller == null ||
+        !_estiloCargado) {
       return;
     }
 
-    if (_rutaCreada) {
-      await controller
-          .setGeoJsonSource(
+    try {
+      if (_rutaCreada) {
+        await controller
+            .setGeoJsonSource(
+          'merc-ruta',
+          geojson,
+        );
+
+        return;
+      }
+
+      await controller.addGeoJsonSource(
         'merc-ruta',
         geojson,
       );
 
-      return;
+      await controller.addLineLayer(
+        'merc-ruta',
+        'merc-ruta-borde',
+        const LineLayerProperties(
+          lineColor: '#FFFFFF',
+          lineWidth: 9,
+          lineOpacity: 0.85,
+        ),
+      );
+
+      await controller.addLineLayer(
+        'merc-ruta',
+        'merc-ruta-line',
+        const LineLayerProperties(
+          lineColor: '#11C031',
+          lineWidth: 6,
+          lineOpacity: 1,
+        ),
+      );
+
+      _rutaCreada = true;
+    } catch (e) {
+      debugPrint(
+        'ERROR DIBUJANDO RUTA: $e',
+      );
     }
-
-    await controller
-        .addGeoJsonSource(
-      'merc-ruta',
-      geojson,
-    );
-
-    // Fondo blanco para que
-    // destaque sobre el naranja.
-    await controller
-        .addLineLayer(
-      'merc-ruta',
-      'merc-ruta-borde',
-      const LineLayerProperties(
-        lineColor:
-            '#FFFFFF',
-
-        lineWidth:
-            9,
-
-        lineOpacity:
-            0.85,
-      ),
-    );
-
-    // Ruta verde Beta 4.4.
-    await controller
-        .addLineLayer(
-      'merc-ruta',
-      'merc-ruta-line',
-      const LineLayerProperties(
-        lineColor:
-            '#11C031',
-
-        lineWidth:
-            6,
-
-        lineOpacity:
-            1,
-      ),
-    );
-
-    _rutaCreada =
-        true;
 
     if (mounted) {
       setState(() {});
     }
   }
 
-  // ============================================================
-  // ENCUADRAR RUTA
-  // ============================================================
-
   Future<void> _encuadrarRuta(
     LatLng origen,
     LatLng destino,
   ) async {
-    final controller =
-        _mapController;
-
-    if (controller ==
-        null) {
-      return;
-    }
-
     final south =
         min(
       origen.latitude,
@@ -2159,64 +2204,45 @@ class _MapaScreenState extends State<MapaScreen> {
       destino.longitude,
     );
 
-    await controller
-        .animateCamera(
-      CameraUpdate
-          .newLatLngBounds(
+    await _animarCamara(
+      CameraUpdate.newLatLngBounds(
         LatLngBounds(
           southwest:
               LatLng(
             south,
             west,
           ),
-
           northeast:
               LatLng(
             north,
             east,
           ),
         ),
-
-        left:
-            55,
-
-        top:
-            100,
-
-        right:
-            55,
-
-        bottom:
-            150,
+        left: 55,
+        top: 100,
+        right: 55,
+        bottom: 150,
       ),
     );
   }
-
-  // ============================================================
-  // CANCELAR RUTA
-  // ============================================================
 
   Future<void>
       _cancelarRuta() async {
     final controller =
         _mapController;
 
-    if (controller !=
-            null &&
+    if (controller != null &&
         _rutaCreada) {
       try {
-        await controller
-            .removeLayer(
+        await controller.removeLayer(
           'merc-ruta-line',
         );
 
-        await controller
-            .removeLayer(
+        await controller.removeLayer(
           'merc-ruta-borde',
         );
 
-        await controller
-            .removeSource(
+        await controller.removeSource(
           'merc-ruta',
         );
       } catch (e) {
@@ -2226,23 +2252,191 @@ class _MapaScreenState extends State<MapaScreen> {
       }
     }
 
-    if (!mounted) {
+    _rutaCreada = false;
+
+    _geoJsonRutaActual = null;
+
+    _destinoActual = null;
+
+    _distanciaRuta = null;
+
+    _duracionRuta = null;
+
+    _seguirUsuario = false;
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  // ============================================================
+  // CENTRAR EL SALVADOR
+  // ============================================================
+
+  Future<void>
+      _centrarElSalvador() async {
+    _seguirUsuario = false;
+
+    _centroCamaraActual =
+        _centroElSalvador;
+
+    _zoomActual = 8.5;
+
+    _bearingActual = 0;
+
+    _tiltActual = 0;
+
+    await _animarCamara(
+      CameraUpdate.newCameraPosition(
+        const CameraPosition(
+          target:
+              _centroElSalvador,
+          zoom: 8.5,
+          bearing: 0,
+          tilt: 0,
+        ),
+      ),
+    );
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  // ============================================================
+  // BRÚJULA
+  //
+  // SIEMPRE VISIBLE.
+  //
+  // Solo funciona si la rotación está activa.
+  //
+  // NO cambia:
+  // - centro
+  // - zoom
+  //
+  // Solo estabiliza:
+  // - bearing = 0
+  // - tilt = 0
+  // ============================================================
+
+  Future<void>
+      _restablecerAnguloMapa() async {
+    if (!_rotacionActiva) {
       return;
     }
 
+    final centro =
+        _centroCamaraActual;
+
+    final zoom =
+        _zoomActual;
+
+    _bearingActual = 0;
+
+    _tiltActual = 0;
+
+    await _animarCamara(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: centro,
+          zoom: zoom,
+          bearing: 0,
+          tilt: 0,
+        ),
+      ),
+    );
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  // ============================================================
+  // ROTACIÓN
+  //
+  // IMPORTANTE:
+  //
+  // NO mueve cámara.
+  // NO cambia zoom.
+  // NO cambia bearing.
+  // NO centra El Salvador.
+  //
+  // Solo bloquea/desbloquea el gesto.
+  // ============================================================
+
+  void _alternarRotacion() {
     setState(() {
-      _rutaCreada =
-          false;
-
-      _destinoActual =
-          null;
-
-      _distanciaRuta =
-          null;
-
-      _duracionRuta =
-          null;
+      _rotacionActiva =
+          !_rotacionActiva;
     });
+
+    _mostrarMensaje(
+      _rotacionActiva
+          ? 'Rotación activada'
+          : 'Rotación bloqueada',
+    );
+  }
+
+  // ============================================================
+  // ZOOM
+  // ============================================================
+
+  Future<void> _acercar() async {
+    final nuevoZoom =
+        (_zoomActual + 1)
+            .clamp(
+              _zoomMinimo,
+              _zoomMaximo,
+            )
+            .toDouble();
+
+    _zoomActual =
+        nuevoZoom;
+
+    await _animarCamara(
+      CameraUpdate.zoomTo(
+        nuevoZoom,
+      ),
+    );
+  }
+
+  Future<void> _alejar() async {
+    final nuevoZoom =
+        (_zoomActual - 1)
+            .clamp(
+              _zoomMinimo,
+              _zoomMaximo,
+            )
+            .toDouble();
+
+    _zoomActual =
+        nuevoZoom;
+
+    await _animarCamara(
+      CameraUpdate.zoomTo(
+        nuevoZoom,
+      ),
+    );
+  }
+
+  // ============================================================
+  // NIVEL ADMIN
+  // ============================================================
+
+  String _nivelActual() {
+    if (_zoomActual < 8.5) {
+      return 'ADMIN0';
+    }
+
+    if (_zoomActual < 10) {
+      return 'ADMIN1';
+    }
+
+    if (_zoomActual < 13) {
+      return 'ADMIN2';
+    }
+
+    return 'ADMIN3';
   }
 
   // ============================================================
@@ -2251,62 +2445,45 @@ class _MapaScreenState extends State<MapaScreen> {
 
   void _mostrarDialogoGpsDesactivado() {
     showDialog(
-      context:
-          context,
-
-      builder:
-          (dialogContext) {
+      context: context,
+      builder: (dialogContext) {
         return AlertDialog(
           icon:
               const Icon(
-            Icons
-                .location_off_outlined,
-
+            Icons.location_off_outlined,
             color:
                 _naranjaPrincipal,
-
-            size:
-                38,
+            size: 38,
           ),
-
           title:
               const Text(
             'Ubicación desactivada',
           ),
-
           content:
               const Text(
             'Activa la ubicación del dispositivo para poder usar el GPS o calcular una ruta.',
           ),
-
           actions: [
             TextButton(
-              onPressed:
-                  () {
+              onPressed: () {
                 Navigator.pop(
                   dialogContext,
                 );
               },
-
               child:
                   const Text(
                 'Cancelar',
               ),
             ),
-
             FilledButton(
               style:
-                  FilledButton
-                      .styleFrom(
+                  FilledButton.styleFrom(
                 backgroundColor:
                     _naranjaPrincipal,
-
                 foregroundColor:
                     Colors.white,
               ),
-
-              onPressed:
-                  () async {
+              onPressed: () async {
                 Navigator.pop(
                   dialogContext,
                 );
@@ -2314,7 +2491,6 @@ class _MapaScreenState extends State<MapaScreen> {
                 await Geolocator
                     .openLocationSettings();
               },
-
               child:
                   const Text(
                 'Abrir ajustes',
@@ -2327,63 +2503,49 @@ class _MapaScreenState extends State<MapaScreen> {
   }
 
   // ============================================================
-  // PERMISO BLOQUEADO
+  // PERMISO
   // ============================================================
 
   void _mostrarDialogoPermisoPermanente() {
     showDialog(
-      context:
-          context,
-
-      builder:
-          (dialogContext) {
+      context: context,
+      builder: (dialogContext) {
         return AlertDialog(
           icon:
               const Icon(
             Icons.gps_off,
-
             color:
                 _naranjaPrincipal,
           ),
-
           title:
               const Text(
             'Permiso requerido',
           ),
-
           content:
               const Text(
             'El permiso de ubicación está bloqueado. Actívalo desde los ajustes de la aplicación.',
           ),
-
           actions: [
             TextButton(
-              onPressed:
-                  () {
+              onPressed: () {
                 Navigator.pop(
                   dialogContext,
                 );
               },
-
               child:
                   const Text(
                 'Cancelar',
               ),
             ),
-
             FilledButton(
               style:
-                  FilledButton
-                      .styleFrom(
+                  FilledButton.styleFrom(
                 backgroundColor:
                     _naranjaPrincipal,
-
                 foregroundColor:
                     Colors.white,
               ),
-
-              onPressed:
-                  () async {
+              onPressed: () async {
                 Navigator.pop(
                   dialogContext,
                 );
@@ -2391,7 +2553,6 @@ class _MapaScreenState extends State<MapaScreen> {
                 await Geolocator
                     .openAppSettings();
               },
-
               child:
                   const Text(
                 'Abrir ajustes',
@@ -2410,12 +2571,20 @@ class _MapaScreenState extends State<MapaScreen> {
   void _mostrarMensaje(
     String mensaje,
   ) {
+    if (!mounted) {
+      return;
+    }
+
     ScaffoldMessenger.of(
       context,
     )
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
+          duration:
+              const Duration(
+            milliseconds: 1300,
+          ),
           content:
               Text(
             mensaje,
@@ -2425,151 +2594,38 @@ class _MapaScreenState extends State<MapaScreen> {
   }
 
   // ============================================================
-  // ZOOM
-  // ============================================================
-
-  Future<void> _acercar() async {
-    if (_mapController ==
-        null) {
-      return;
-    }
-
-    final zoom =
-        (_zoomActual + 1)
-            .clamp(
-              _zoomMinimo,
-              _zoomMaximo,
-            )
-            .toDouble();
-
-    await _mapController!
-        .animateCamera(
-      CameraUpdate.zoomTo(
-        zoom,
-      ),
-    );
-  }
-
-  Future<void> _alejar() async {
-    if (_mapController ==
-        null) {
-      return;
-    }
-
-    final zoom =
-        (_zoomActual - 1)
-            .clamp(
-              _zoomMinimo,
-              _zoomMaximo,
-            )
-            .toDouble();
-
-    await _mapController!
-        .animateCamera(
-      CameraUpdate.zoomTo(
-        zoom,
-      ),
-    );
-  }
-
-  // ============================================================
-  // CENTRAR
-  // ============================================================
-
-  Future<void>
-      _centrarElSalvador() async {
-    if (_mapController ==
-        null) {
-      return;
-    }
-
-    await _mapController!
-        .animateCamera(
-      CameraUpdate
-          .newLatLngBounds(
-        _limitesElSalvador,
-
-        left:
-            25,
-
-        top:
-            80,
-
-        right:
-            25,
-
-        bottom:
-            70,
-      ),
-    );
-  }
-
-  // ============================================================
-  // NIVEL
-  // ============================================================
-
-  String _nivelActual() {
-    if (_zoomActual <
-        8.5) {
-      return 'ADMIN0';
-    }
-
-    if (_zoomActual <
-        10) {
-      return 'ADMIN1';
-    }
-
-    if (_zoomActual <
-        13) {
-      return 'ADMIN2';
-    }
-
-    return 'ADMIN3';
-  }
-
-  // ============================================================
   // BOTÓN
   // ============================================================
 
   Widget _boton({
     required String tag,
     required IconData icon,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     required bool oscuro,
     bool cargando = false,
+    Color? color,
   }) {
-    return FloatingActionButton
-        .small(
-      heroTag:
-          tag,
-
+    return FloatingActionButton.small(
+      heroTag: tag,
       backgroundColor:
           oscuro
               ? _panelOscuro
               : Colors.white,
-
       foregroundColor:
-          _naranjaPrincipal,
-
+          color ??
+              _naranjaPrincipal,
       onPressed:
           cargando
               ? null
               : onPressed,
-
       child:
           cargando
               ? const SizedBox(
-                  width:
-                      19,
-
-                  height:
-                      19,
-
+                  width: 19,
+                  height: 19,
                   child:
                       CircularProgressIndicator(
-                    strokeWidth:
-                        2,
-
+                    strokeWidth: 2,
                     color:
                         _naranjaPrincipal,
                   ),
@@ -2585,13 +2641,11 @@ class _MapaScreenState extends State<MapaScreen> {
   // ============================================================
 
   String _formatearDistancia() {
-    if (_distanciaRuta ==
-        null) {
+    if (_distanciaRuta == null) {
       return '';
     }
 
-    if (_distanciaRuta! <
-        1000) {
+    if (_distanciaRuta! < 1000) {
       return '${_distanciaRuta!.round()} m';
     }
 
@@ -2599,8 +2653,7 @@ class _MapaScreenState extends State<MapaScreen> {
   }
 
   String _formatearDuracion() {
-    if (_duracionRuta ==
-        null) {
+    if (_duracionRuta == null) {
       return '';
     }
 
@@ -2608,8 +2661,7 @@ class _MapaScreenState extends State<MapaScreen> {
         (_duracionRuta! / 60)
             .round();
 
-    if (minutos <
-        60) {
+    if (minutos < 60) {
       return '$minutos min';
     }
 
@@ -2630,6 +2682,10 @@ class _MapaScreenState extends State<MapaScreen> {
   Widget build(
     BuildContext context,
   ) {
+    super.build(
+      context,
+    );
+
     final oscuro =
         Theme.of(context)
                 .brightness ==
@@ -2653,9 +2709,7 @@ class _MapaScreenState extends State<MapaScreen> {
               );
 
     return Scaffold(
-      backgroundColor:
-          fondo,
-
+      backgroundColor: fondo,
       body: Stack(
         children: [
           // ====================================================
@@ -2676,12 +2730,15 @@ class _MapaScreenState extends State<MapaScreen> {
                     : _estiloClaro,
 
             initialCameraPosition:
-                const CameraPosition(
+                CameraPosition(
               target:
-                  _centroElSalvador,
-
+                  _centroCamaraActual,
               zoom:
-                  8.5,
+                  _zoomActual,
+              bearing:
+                  _bearingActual,
+              tilt:
+                  _tiltActual,
             ),
 
             cameraTargetBounds:
@@ -2695,12 +2752,22 @@ class _MapaScreenState extends State<MapaScreen> {
               _zoomMaximo,
             ),
 
+            scrollGesturesEnabled:
+                true,
+
+            zoomGesturesEnabled:
+                true,
+
             rotateGesturesEnabled:
-                false,
+                _rotacionActiva,
 
             tiltGesturesEnabled:
-                false,
+                _rotacionActiva,
 
+            /*
+             * Desactivamos la brújula nativa porque usamos
+             * nuestra brújula personalizada.
+             */
             compassEnabled:
                 false,
 
@@ -2716,30 +2783,56 @@ class _MapaScreenState extends State<MapaScreen> {
             onStyleLoadedCallback:
                 _onStyleLoaded,
 
-            // ==================================================
-            // TAP ROBUSTO EN MÓVIL
-            //
-            // La capa interactiva dispara onFeatureTapped y,
-            // además, este callback consulta manualmente la capa
-            // cuando el toque específico falla en Android/iOS.
-            // ==================================================
-
             onMapClick:
                 _onMapClick,
 
             featureTapsTriggersMapClick:
                 true,
 
+            // ==================================================
+            // CAMERA MOVE
+            //
+            // NO SETSTATE AQUÍ.
+            //
+            // Esto es importante para rendimiento.
+            // ==================================================
+
             onCameraMove:
                 (position) {
-              if ((position.zoom -
-                          _zoomActual)
-                      .abs() >
-                  0.05) {
-                setState(() {
-                  _zoomActual =
-                      position.zoom;
-                });
+              _centroCamaraActual =
+                  position.target;
+
+              _zoomActual =
+                  position.zoom;
+
+              _bearingActual =
+                  position.bearing;
+
+              _tiltActual =
+                  position.tilt;
+
+              /*
+               * Si el usuario toca/mueve/gira el mapa
+               * mientras está siguiendo el GPS,
+               * liberamos la cámara.
+               *
+               * El punto GPS sigue actualizándose.
+               */
+              if (!_moviendoCamaraProgramaticamente &&
+                  _seguirUsuario) {
+                _seguirUsuario =
+                    false;
+              }
+            },
+
+            /*
+             * Solo reconstruimos UI cuando termina
+             * el movimiento del mapa.
+             */
+            onCameraIdle:
+                () {
+              if (mounted) {
+                setState(() {});
               }
             },
           ),
@@ -2753,13 +2846,10 @@ class _MapaScreenState extends State<MapaScreen> {
             Container(
               color:
                   fondo.withValues(
-                alpha:
-                    0.80,
+                alpha: 0.80,
               ),
-
               alignment:
                   Alignment.center,
-
               child:
                   const CircularProgressIndicator(
                 color:
@@ -2780,61 +2870,132 @@ class _MapaScreenState extends State<MapaScreen> {
                 80,
                 12,
               ),
-
               child: Container(
-                height:
-                    52,
-
+                height: 52,
                 padding:
                     const EdgeInsets.symmetric(
-                  horizontal:
-                      15,
+                  horizontal: 15,
                 ),
-
                 decoration:
                     BoxDecoration(
                   color:
                       panel.withValues(
-                    alpha:
-                        0.95,
+                    alpha: 0.95,
                   ),
-
                   borderRadius:
                       BorderRadius.circular(
                     18,
                   ),
                 ),
-
                 child: Row(
                   children: [
                     const Icon(
-                      Icons
-                          .map_outlined,
-
+                      Icons.map_outlined,
                       color:
                           _naranjaPrincipal,
                     ),
-
                     const SizedBox(
-                      width:
-                          8,
+                      width: 8,
                     ),
-
                     Expanded(
                       child: Text(
                         'Mapa de El Salvador',
-
                         style:
                             TextStyle(
-                          color:
-                              texto,
-
+                          color: texto,
                           fontWeight:
                               FontWeight.bold,
                         ),
                       ),
                     ),
+                    if (_actualizacionContinua)
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.gps_fixed,
+                            color:
+                                _verdeRuta,
+                            size: 17,
+                          ),
+                          const SizedBox(
+                            width: 4,
+                          ),
+                          Text(
+                            _seguirUsuario
+                                ? 'GPS'
+                                : 'GPS',
+                            style:
+                                const TextStyle(
+                              color:
+                                  _verdeRuta,
+                              fontSize:
+                                  11,
+                              fontWeight:
+                                  FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                   ],
+                ),
+              ),
+            ),
+          ),
+
+          // ====================================================
+          // BRÚJULA
+          //
+          // SIEMPRE VISIBLE.
+          //
+          // Se desactiva cuando se bloquea la rotación.
+          // ====================================================
+
+          Positioned(
+            left:
+                15,
+
+            top:
+                MediaQuery.of(
+                      context,
+                    ).padding.top +
+                    78,
+
+            child:
+                FloatingActionButton.small(
+              heroTag:
+                  'brujulaUsuario',
+
+              backgroundColor:
+                  oscuro
+                      ? _panelOscuro
+                      : Colors.white,
+
+              foregroundColor:
+                  _rotacionActiva
+                      ? _naranjaPrincipal
+                      : Colors.grey,
+
+              /*
+               * Si rotación está desactivada,
+               * la brújula queda realmente deshabilitada.
+               */
+              onPressed:
+                  _rotacionActiva
+                      ? _restablecerAnguloMapa
+                      : null,
+
+              child:
+                  Transform.rotate(
+                angle:
+                    -_bearingActual *
+                        pi /
+                        180,
+
+                child:
+                    Icon(
+                  _rotacionActiva
+                      ? Icons.navigation
+                      : Icons.navigation_outlined,
                 ),
               ),
             ),
@@ -2854,77 +3015,71 @@ class _MapaScreenState extends State<MapaScreen> {
                     ).padding.top +
                     12,
 
-            child: Column(
+            child:
+                Column(
               children: [
                 _boton(
                   tag:
-                      'zoomMas',
-
+                      'zoomMasUsuario',
                   icon:
                       Icons.add,
-
                   onPressed:
                       _acercar,
-
                   oscuro:
                       oscuro,
                 ),
 
                 const SizedBox(
-                  height:
-                      10,
+                  height: 10,
                 ),
 
                 _boton(
                   tag:
-                      'zoomMenos',
-
+                      'zoomMenosUsuario',
                   icon:
                       Icons.remove,
-
                   onPressed:
                       _alejar,
-
                   oscuro:
                       oscuro,
                 ),
 
                 const SizedBox(
-                  height:
-                      10,
+                  height: 10,
                 ),
 
                 _boton(
                   tag:
-                      'centrar',
-
+                      'centrarUsuario',
                   icon:
-                      Icons
-                          .center_focus_strong,
-
+                      Icons.center_focus_strong,
                   onPressed:
                       _centrarElSalvador,
-
                   oscuro:
                       oscuro,
                 ),
 
                 const SizedBox(
-                  height:
-                      10,
+                  height: 10,
                 ),
+
+                // =================================================
+                // GPS
+                // =================================================
 
                 _boton(
                   tag:
-                      'gps',
+                      'gpsUsuario',
 
                   icon:
-                      _posicionUsuario ==
-                              null
-                          ? Icons
-                              .location_searching
-                          : Icons
-                              .my_location,
+                      _actualizacionContinua
+                          ? (_seguirUsuario
+                              ? Icons.gps_fixed
+                              : Icons.my_location)
+                          : (_posicionUsuario ==
+                                  null
+                              ? Icons.location_searching
+                              : Icons.my_location),
 
                   onPressed:
                       _obtenerMiUbicacion,
@@ -2934,6 +3089,40 @@ class _MapaScreenState extends State<MapaScreen> {
 
                   cargando:
                       _obteniendoUbicacion,
+
+                  color:
+                      _actualizacionContinua
+                          ? _verdeRuta
+                          : _naranjaPrincipal,
+                ),
+
+                const SizedBox(
+                  height: 10,
+                ),
+
+                // =================================================
+                // ROTACIÓN
+                // =================================================
+
+                _boton(
+                  tag:
+                      'rotacionUsuario',
+
+                  icon:
+                      _rotacionActiva
+                          ? Icons.screen_rotation_alt
+                          : Icons.screen_lock_rotation,
+
+                  onPressed:
+                      _alternarRotacion,
+
+                  oscuro:
+                      oscuro,
+
+                  color:
+                      _rotacionActiva
+                          ? _naranjaPrincipal
+                          : Colors.grey,
                 ),
               ],
             ),
@@ -2951,22 +3140,17 @@ class _MapaScreenState extends State<MapaScreen> {
                       EdgeInsets.all(
                     18,
                   ),
-
                   child: Row(
                     mainAxisSize:
                         MainAxisSize.min,
-
                     children: [
                       CircularProgressIndicator(
                         color:
                             _verdeRuta,
                       ),
-
                       SizedBox(
-                        width:
-                            15,
+                        width: 15,
                       ),
-
                       Text(
                         'Calculando ruta...',
                       ),
@@ -2981,127 +3165,88 @@ class _MapaScreenState extends State<MapaScreen> {
           // ====================================================
 
           if (_rutaCreada &&
-              _destinoActual !=
-                  null)
+              _destinoActual != null)
             Positioned(
-              left:
-                  15,
-
-              right:
-                  15,
-
-              bottom:
-                  20,
-
+              left: 15,
+              right: 15,
+              bottom: 20,
               child: SafeArea(
-                top:
-                    false,
-
+                top: false,
                 child: Container(
                   padding:
                       const EdgeInsets.all(
                     15,
                   ),
-
                   decoration:
                       BoxDecoration(
                     color:
                         panel.withValues(
-                      alpha:
-                          0.97,
+                      alpha: 0.97,
                     ),
-
                     borderRadius:
                         BorderRadius.circular(
                       18,
                     ),
-
                     boxShadow: [
                       BoxShadow(
                         color:
                             Colors.black
                                 .withValues(
-                          alpha:
-                              0.15,
+                          alpha: 0.15,
                         ),
-
-                        blurRadius:
-                            12,
+                        blurRadius: 12,
                       ),
                     ],
                   ),
-
                   child: Row(
                     children: [
                       Container(
-                        width:
-                            45,
-
-                        height:
-                            45,
-
+                        width: 45,
+                        height: 45,
                         decoration:
                             const BoxDecoration(
                           color:
                               _verdeRuta,
-
                           shape:
                               BoxShape.circle,
                         ),
-
                         child:
                             const Icon(
                           Icons.route,
-
                           color:
                               Colors.white,
                         ),
                       ),
-
                       const SizedBox(
-                        width:
-                            12,
+                        width: 12,
                       ),
-
                       Expanded(
                         child: Column(
                           crossAxisAlignment:
-                              CrossAxisAlignment
-                                  .start,
-
+                              CrossAxisAlignment.start,
                           children: [
                             Text(
                               _destinoActual!
                                   .nombre,
-
-                              maxLines:
-                                  1,
-
+                              maxLines: 1,
                               overflow:
-                                  TextOverflow
-                                      .ellipsis,
-
+                                  TextOverflow.ellipsis,
                               style:
                                   const TextStyle(
                                 fontWeight:
                                     FontWeight.bold,
                               ),
                             ),
-
                             const SizedBox(
-                              height:
-                                  3,
+                              height: 3,
                             ),
-
                             Text(
                               '${_formatearDistancia()} · '
                               '${_formatearDuracion()}',
-
                               style:
                                   const TextStyle(
                                 color:
                                     _verdeRuta,
-
                                 fontWeight:
                                     FontWeight.bold,
                               ),
@@ -3109,14 +3254,11 @@ class _MapaScreenState extends State<MapaScreen> {
                           ],
                         ),
                       ),
-
                       IconButton(
                         tooltip:
                             'Cancelar ruta',
-
                         onPressed:
                             _cancelarRuta,
-
                         icon:
                             const Icon(
                           Icons.close,
@@ -3129,75 +3271,49 @@ class _MapaScreenState extends State<MapaScreen> {
             )
           else
             Positioned(
-              left:
-                  15,
-
-              bottom:
-                  25,
-
+              left: 15,
+              bottom: 25,
               child: SafeArea(
-                top:
-                    false,
-
+                top: false,
                 child: Container(
                   padding:
                       const EdgeInsets.symmetric(
-                    horizontal:
-                        14,
-
-                    vertical:
-                        9,
+                    horizontal: 14,
+                    vertical: 9,
                   ),
-
                   decoration:
                       BoxDecoration(
                     color:
                         panel.withValues(
-                      alpha:
-                          0.95,
+                      alpha: 0.95,
                     ),
-
                     borderRadius:
                         BorderRadius.circular(
                       20,
                     ),
                   ),
-
                   child: Row(
                     mainAxisSize:
                         MainAxisSize.min,
-
                     children: [
                       const Icon(
-                        Icons
-                            .layers_outlined,
-
+                        Icons.layers_outlined,
                         color:
                             _naranjaPrincipal,
-
-                        size:
-                            17,
+                        size: 17,
                       ),
-
                       const SizedBox(
-                        width:
-                            6,
+                        width: 6,
                       ),
-
                       Text(
                         '${_nivelActual()} · '
                         'Zoom ${_zoomActual.toStringAsFixed(1)}',
-
                         style:
                             TextStyle(
-                          color:
-                              texto,
-
+                          color: texto,
                           fontWeight:
                               FontWeight.bold,
-
-                          fontSize:
-                              12,
+                          fontSize: 12,
                         ),
                       ),
                     ],
@@ -3210,34 +3326,27 @@ class _MapaScreenState extends State<MapaScreen> {
           // ERROR
           // ====================================================
 
-          if (_error !=
-              null)
+          if (_error != null)
             Center(
               child: Container(
                 margin:
                     const EdgeInsets.all(
                   30,
                 ),
-
                 padding:
                     const EdgeInsets.all(
                   20,
                 ),
-
                 decoration:
                     BoxDecoration(
-                  color:
-                      panel,
-
+                  color: panel,
                   borderRadius:
                       BorderRadius.circular(
                     18,
                   ),
                 ),
-
                 child: Text(
                   _error!,
-
                   textAlign:
                       TextAlign.center,
                 ),
