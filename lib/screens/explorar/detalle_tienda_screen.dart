@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../helpers/chat_helper.dart';
 import '../../models/emprendimiento.dart';
 import '../../models/producto.dart';
 import '../../services/emprendimiento_service.dart';
 import '../../services/producto_service.dart';
 import '../producto_actions/detalle_producto_screen.dart';
 
-class DetalleTiendaScreen
-    extends StatefulWidget {
+class DetalleTiendaScreen extends StatefulWidget {
   final int emprendimientoId;
 
   const DetalleTiendaScreen({
@@ -16,18 +16,15 @@ class DetalleTiendaScreen
   });
 
   @override
-  State<DetalleTiendaScreen>
-      createState() =>
-          _DetalleTiendaScreenState();
+  State<DetalleTiendaScreen> createState() =>
+      _DetalleTiendaScreenState();
 }
 
 class _DetalleTiendaScreenState
     extends State<DetalleTiendaScreen> {
-  Emprendimiento?
-      emprendimiento;
+  Emprendimiento? emprendimiento;
 
-  List<Producto> productos =
-      [];
+  List<Producto> productos = [];
 
   bool cargando = true;
 
@@ -38,20 +35,24 @@ class _DetalleTiendaScreenState
     cargar();
   }
 
+  // ============================================================
+  // CARGAR TIENDA Y PRODUCTOS
+  // ============================================================
+
   Future<void> cargar() async {
     final tienda =
-        await EmprendimientoService
-            .obtenerPorId(
+        await EmprendimientoService.obtenerPorId(
       widget.emprendimientoId,
     );
 
     final catalogo =
-        await ProductoService
-            .listarPorEmprendimiento(
+        await ProductoService.listarPorEmprendimiento(
       widget.emprendimientoId,
     );
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     setState(() {
       if (tienda['success'] == true) {
@@ -68,6 +69,40 @@ class _DetalleTiendaScreenState
     });
   }
 
+  // ============================================================
+  // ABRIR CHAT
+  // ============================================================
+
+  Future<void> _enviarMensaje(
+    Emprendimiento tienda,
+  ) async {
+    if (tienda.usuarioId == null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se encontró el usuario propietario de esta tienda.',
+            ),
+          ),
+        );
+
+      return;
+    }
+
+    await ChatHelper.abrirChat(
+      context: context,
+      usuarioDestinoId:
+          tienda.usuarioId!,
+      nombreDestino:
+          tienda.nombre,
+    );
+  }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
+
   @override
   Widget build(
     BuildContext context,
@@ -75,10 +110,10 @@ class _DetalleTiendaScreenState
     if (cargando) {
       return const Scaffold(
         body: Center(
-          child:
-              CircularProgressIndicator(
-            color:
-                Color(0xFFFF7E01),
+          child: CircularProgressIndicator(
+            color: Color(
+              0xFFFF7E01,
+            ),
           ),
         ),
       );
@@ -95,7 +130,7 @@ class _DetalleTiendaScreenState
       );
     }
 
-    final tienda =
+    final Emprendimiento tienda =
         emprendimiento!;
 
     return Scaffold(
@@ -106,46 +141,55 @@ class _DetalleTiendaScreenState
       ),
 
       body: ListView(
-        padding:
-            const EdgeInsets.all(
+        padding: const EdgeInsets.all(
           20,
         ),
         children: [
+          // ====================================================
+          // IMAGEN
+          // ====================================================
+
           Center(
-  child: CircleAvatar(
-    radius: 55,
+            child: CircleAvatar(
+              radius: 55,
 
-    backgroundColor:
-        const Color(
-      0xFFFF7E01,
-    ),
+              backgroundColor:
+                  const Color(
+                0xFFFF7E01,
+              ),
 
-    backgroundImage:
-        tienda.imagenUrl != null &&
-                tienda.imagenUrl!
-                    .isNotEmpty
-            ? NetworkImage(
-                tienda.imagenUrl!,
-              )
-            : null,
+              backgroundImage:
+                  tienda.imagenUrl !=
+                              null &&
+                          tienda.imagenUrl!
+                              .isNotEmpty
+                      ? NetworkImage(
+                          tienda.imagenUrl!,
+                        )
+                      : null,
 
-    child:
-        tienda.imagenUrl == null ||
-                tienda.imagenUrl!
-                    .isEmpty
-            ? const Icon(
-                Icons.storefront,
-                size: 60,
-                color:
-                    Colors.white,
-              )
-            : null,
-  ),
-),
+              child:
+                  tienda.imagenUrl ==
+                              null ||
+                          tienda.imagenUrl!
+                              .isEmpty
+                      ? const Icon(
+                          Icons.storefront,
+                          size: 60,
+                          color:
+                              Colors.white,
+                        )
+                      : null,
+            ),
+          ),
 
           const SizedBox(
             height: 15,
           ),
+
+          // ====================================================
+          // NOMBRE
+          // ====================================================
 
           Text(
             tienda.nombre,
@@ -159,11 +203,18 @@ class _DetalleTiendaScreenState
             ),
           ),
 
+          // ====================================================
+          // DESCRIPCIÓN
+          // ====================================================
+
           if (tienda.descripcion !=
-              null) ...[
+                  null &&
+              tienda.descripcion!
+                  .isNotEmpty) ...[
             const SizedBox(
               height: 10,
             ),
+
             Text(
               tienda.descripcion!,
               textAlign:
@@ -172,8 +223,60 @@ class _DetalleTiendaScreenState
           ],
 
           const SizedBox(
+            height: 20,
+          ),
+
+          // ====================================================
+          // ENVIAR MENSAJE
+          // ====================================================
+
+          SizedBox(
+            width:
+                double.infinity,
+            height:
+                50,
+            child:
+                FilledButton.icon(
+              style:
+                  FilledButton.styleFrom(
+                backgroundColor:
+                    const Color(
+                  0xFFFF7E01,
+                ),
+                foregroundColor:
+                    Colors.white,
+              ),
+
+              onPressed:
+                  tienda.usuarioId ==
+                          null
+                      ? null
+                      : () {
+                          _enviarMensaje(
+                            tienda,
+                          );
+                        },
+
+              icon:
+                  const Icon(
+                Icons
+                    .chat_bubble_outline,
+              ),
+
+              label:
+                  const Text(
+                'Enviar mensaje',
+              ),
+            ),
+          ),
+
+          const SizedBox(
             height: 30,
           ),
+
+          // ====================================================
+          // PRODUCTOS
+          // ====================================================
 
           const Text(
             'Productos',
@@ -203,9 +306,15 @@ class _DetalleTiendaScreenState
             ),
 
           ...productos.map(
-            (producto) {
+            (
+              producto,
+            ) {
               return Card(
                 child: ListTile(
+                  // ============================================
+                  // IMAGEN PRODUCTO
+                  // ============================================
+
                   leading:
                       producto.imagenPrincipal !=
                                   null &&
@@ -243,11 +352,21 @@ class _DetalleTiendaScreenState
                               ),
                             ),
 
-                  title: Text(
+                  // ============================================
+                  // NOMBRE
+                  // ============================================
+
+                  title:
+                      Text(
                     producto.nombre,
                   ),
 
-                  subtitle: Text(
+                  // ============================================
+                  // PRECIO
+                  // ============================================
+
+                  subtitle:
+                      Text(
                     '\$${producto.precio.toStringAsFixed(2)}',
                   ),
 
@@ -256,12 +375,18 @@ class _DetalleTiendaScreenState
                     Icons.chevron_right,
                   ),
 
-                  onTap: () {
+                  // ============================================
+                  // DETALLE PRODUCTO
+                  // ============================================
+
+                  onTap:
+                      () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) =>
-                            DetalleProductoScreen(
+                        builder:
+                            (_) =>
+                                DetalleProductoScreen(
                           productoId:
                               producto.id,
                         ),

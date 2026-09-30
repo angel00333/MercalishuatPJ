@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../services/theme_service.dart';
+import '../chat/conversaciones_screen.dart';
 import '../explorar/explorar_emprendimientos_screen.dart';
 import '../home_emprendedor_screen.dart';
+import '../mapa_screen_emprendedor.dart';
 import '../perfil_screen.dart';
 import '../producto_actions/productos_screen.dart';
 import '../tienda_actions/mi_tienda_screen.dart';
-import '../mapa_screen_emprendedor.dart';
 
 class EmprendedorNavScreen extends StatefulWidget {
   final ThemeService themeService;
@@ -46,6 +47,8 @@ class _EmprendedorNavScreenState
         themeService: widget.themeService,
       ),
 
+      const ConversacionesScreen(),
+
       PerfilScreen(
         themeService: widget.themeService,
       ),
@@ -56,26 +59,18 @@ class _EmprendedorNavScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       // ========================================================
-      // IMPORTANTE
-      //
-      // ANTES:
-      //
-      // body: paginas[indexActual],
-      //
-      // AHORA:
+      // PANTALLAS
       //
       // IndexedStack mantiene todas las pantallas montadas.
       //
-      // Esto permite que el mapa conserve:
+      // Esto permite conservar:
       //
-      // - ubicación de cámara
+      // - estado del mapa
+      // - GPS
       // - zoom
-      // - inclinación
-      // - rotación
-      // - GPS activo
-      // - posición GPS
-      // - ruta
+      // - rutas
       // - tiendas cargadas
+      // - estado de conversaciones
       // ========================================================
 
       body: IndexedStack(
@@ -91,8 +86,6 @@ class _EmprendedorNavScreenState
         selectedIndex: indexActual,
 
         onDestinationSelected: (index) {
-          // Evitamos reconstrucción innecesaria si pulsa
-          // nuevamente la pestaña actual.
           if (index == indexActual) {
             return;
           }
@@ -157,6 +150,20 @@ class _EmprendedorNavScreenState
               Icons.store,
             ),
             label: 'Mi tienda',
+          ),
+
+          // ====================================================
+          // MENSAJES
+          // ====================================================
+
+          NavigationDestination(
+            icon: Icon(
+              Icons.chat_bubble_outline,
+            ),
+            selectedIcon: Icon(
+              Icons.chat_bubble,
+            ),
+            label: 'Mensajes',
           ),
 
           // ====================================================

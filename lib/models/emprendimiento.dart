@@ -7,6 +7,7 @@ class Emprendimiento {
   final String? telefono;
   final String? correoContacto;
   final String? imagenUrl;
+
   final double? latitud;
   final double? longitud;
 
@@ -20,68 +21,92 @@ class Emprendimiento {
     this.usuarioId,
     required this.nombre,
     this.descripcion,
-    this.imagenUrl,
     this.telefono,
     this.correoContacto,
+    this.imagenUrl,
+    this.latitud,
+    this.longitud,
     this.activo = true,
     this.propietario,
     this.fechaCreacion,
-    this.latitud,
-    this.longitud,
   });
 
   factory Emprendimiento.fromJson(
     Map<String, dynamic> json,
   ) {
     return Emprendimiento(
-      id: _toInt(json['id']) ?? 0,
+      id:
+          _toInt(
+            json['id'],
+          ) ??
+          0,
 
       usuarioId:
-          _toInt(json['usuario_id']),
+          _toInt(
+            json['usuario_id'],
+          ),
 
       nombre:
-          json['nombre']?.toString() ?? '',
+          json['nombre']
+              ?.toString() ??
+          '',
 
       descripcion:
-          json['descripcion']?.toString(),
-          
-      imagenUrl:
-          json['imagen_url']?.toString(),
+          json['descripcion']
+              ?.toString(),
 
       telefono:
-          json['telefono']?.toString(),
+          json['telefono']
+              ?.toString(),
 
       correoContacto:
-          json['correo_contacto']?.toString(),
+          json['correo_contacto']
+              ?.toString(),
+
+      imagenUrl:
+          json['imagen_url']
+              ?.toString(),
 
       activo:
-          json['activo'] ?? true,
+          json['activo'] ??
+          true,
 
       propietario:
-          json['propietario']?.toString(),
+          json['propietario']
+              ?.toString(),
 
       fechaCreacion:
-          json['fecha_creacion'] != null
+          json['fecha_creacion'] !=
+                  null
               ? DateTime.tryParse(
                   json['fecha_creacion']
                       .toString(),
                 )
               : null,
-      latitud: json['latitud'] == null
-    ? null
-    : double.tryParse(
-        json['latitud'].toString(),
-      ),
 
-      longitud: json['longitud'] == null
-    ? null
-    : double.tryParse(
-        json['longitud'].toString(),
-      ),
+      latitud:
+          json['latitud'] ==
+                  null
+              ? null
+              : double.tryParse(
+                  json['latitud']
+                      .toString(),
+                ),
+
+      longitud:
+          json['longitud'] ==
+                  null
+              ? null
+              : double.tryParse(
+                  json['longitud']
+                      .toString(),
+                ),
     );
   }
 
-  static int? _toInt(dynamic valor) {
+  static int? _toInt(
+    dynamic valor,
+  ) {
     if (valor == null) {
       return null;
     }
@@ -97,17 +122,42 @@ class Emprendimiento {
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
-      'usuario_id': usuarioId,
-      'nombre': nombre,
-      'descripcion': descripcion,
-      'telefono': telefono,
+      'id':
+          id,
+
+      'usuario_id':
+          usuarioId,
+
+      'nombre':
+          nombre,
+
+      'descripcion':
+          descripcion,
+
+      'telefono':
+          telefono,
+
       'correo_contacto':
           correoContacto,
-      'activo': activo,
-      'propietario': propietario,
+
+      'imagen_url':
+          imagenUrl,
+
+      'latitud':
+          latitud,
+
+      'longitud':
+          longitud,
+
+      'activo':
+          activo,
+
+      'propietario':
+          propietario,
+
       'fecha_creacion':
-          fechaCreacion?.toIso8601String(),
+          fechaCreacion
+              ?.toIso8601String(),
     };
   }
 }

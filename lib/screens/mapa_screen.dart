@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
+import '../helpers/chat_helper.dart';
 import '../models/emprendimiento.dart';
 import '../services/emprendimiento_service.dart';
 import '../services/ruta_service.dart';
@@ -1241,6 +1242,53 @@ class _MapaScreenState extends State<MapaScreen>
                 const SizedBox(
                   height: 12,
                 ),
+
+                // =================================================
+                // ENVIAR MENSAJE
+                // =================================================
+
+                SizedBox(
+                  height: 50,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor:
+                          _naranjaPrincipal,
+                      foregroundColor:
+                          Colors.white,
+                    ),
+                    onPressed:
+                        emprendimiento.usuarioId ==
+                                null
+                            ? null
+                            : () {
+                                Navigator.pop(
+                                  bottomContext,
+                                );
+
+                                ChatHelper.abrirChat(
+                                  context:
+                                      context,
+                                  usuarioDestinoId:
+                                      emprendimiento
+                                          .usuarioId!,
+                                  nombreDestino:
+                                      emprendimiento
+                                          .nombre,
+                                );
+                              },
+                    icon: const Icon(
+                      Icons.chat_bubble_outline,
+                    ),
+                    label: const Text(
+                      'Enviar mensaje',
+                    ),
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 12,
+                ),
+
                 SizedBox(
                   height: 50,
                   child:
@@ -1409,6 +1457,55 @@ class _MapaScreenState extends State<MapaScreen>
                 const SizedBox(
                   height: 16,
                 ),
+
+                // =================================================
+                // ENVIAR MENSAJE DESDE PERFIL
+                // =================================================
+
+                SizedBox(
+                  width:
+                      double.infinity,
+                  height: 50,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor:
+                          _naranjaPrincipal,
+                      foregroundColor:
+                          Colors.white,
+                    ),
+                    onPressed:
+                        emprendimiento.usuarioId ==
+                                null
+                            ? null
+                            : () {
+                                Navigator.pop(
+                                  perfilContext,
+                                );
+
+                                ChatHelper.abrirChat(
+                                  context:
+                                      context,
+                                  usuarioDestinoId:
+                                      emprendimiento
+                                          .usuarioId!,
+                                  nombreDestino:
+                                      emprendimiento
+                                          .nombre,
+                                );
+                              },
+                    icon: const Icon(
+                      Icons.chat_bubble_outline,
+                    ),
+                    label: const Text(
+                      'Enviar mensaje',
+                    ),
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 12,
+                ),
+
                 SizedBox(
                   width:
                       double.infinity,

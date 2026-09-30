@@ -1,8 +1,8 @@
-
 import 'package:flutter/material.dart';
 import 'package:mercalishuat/screens/navigation/emprendedor_nav_screen.dart';
 
 import '../../services/theme_service.dart';
+import '../chat/conversaciones_screen.dart';
 import '../mapa_screen.dart';
 import '../explorar/explorar_emprendimientos_screen.dart';
 import '../home_usuario_screen.dart';
@@ -33,20 +33,19 @@ class _UsuarioNavScreenState
     super.initState();
 
     // ==========================================================
-    // IMPORTANTE
+    // PANTALLAS
     //
-    // Estas pantallas se crean UNA SOLA VEZ.
+    // Se crean una sola vez.
     //
-    // Al utilizar IndexedStack más abajo:
+    // IndexedStack permite conservar:
     //
-    // - MapaScreen no se destruye.
-    // - conserva zoom.
-    // - conserva rotación.
-    // - conserva inclinación.
-    // - conserva posición.
-    // - conserva GPS activo.
-    // - conserva rutas.
-    // - conserva estado de las demás pantallas.
+    // - estado del mapa
+    // - zoom
+    // - GPS
+    // - rutas
+    // - posición
+    // - estado del feed
+    // - conversaciones
     // ==========================================================
 
     paginas = [
@@ -58,6 +57,8 @@ class _UsuarioNavScreenState
 
       const TiendasUsuarioScreen(),
 
+      const ConversacionesScreen(),
+
       PerfilScreen(
         themeService: widget.themeService,
       ),
@@ -68,16 +69,7 @@ class _UsuarioNavScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       // ========================================================
-      // PANTALLAS
-      //
-      // ANTES:
-      //
-      // body: paginas[indexActual],
-      //
-      // AHORA:
-      //
-      // IndexedStack mantiene todas las pantallas vivas,
-      // mostrando solamente la seleccionada.
+      // CONTENIDO
       // ========================================================
 
       body: IndexedStack(
@@ -157,6 +149,20 @@ class _UsuarioNavScreenState
               Icons.storefront,
             ),
             label: 'Tiendas',
+          ),
+
+          // ====================================================
+          // MENSAJES
+          // ====================================================
+
+          NavigationDestination(
+            icon: Icon(
+              Icons.chat_bubble_outline,
+            ),
+            selectedIcon: Icon(
+              Icons.chat_bubble,
+            ),
+            label: 'Mensajes',
           ),
 
           // ====================================================
