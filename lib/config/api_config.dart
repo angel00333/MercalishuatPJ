@@ -1,6 +1,6 @@
 class ApiConfig {
   static const String baseUrl =
-      'https://mercalishuatbackend-production-bacb.up.railway.app/api';
+      'https://mercalishuatbackend-production-f311.up.railway.app/api';
 
   // =========================
   // AUTENTICACIÓN

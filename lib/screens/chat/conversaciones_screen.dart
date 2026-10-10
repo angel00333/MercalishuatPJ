@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/conversacion.dart';
 import '../../services/chat_service.dart';
+import '../../services/chat_socket_service.dart';
 import 'chat_screen.dart';
 
 class ConversacionesScreen extends StatefulWidget {
@@ -19,36 +20,133 @@ class _ConversacionesScreenState
   static const Color naranja =
       Color(0xFFFF7E01);
 
-  List<Conversacion> conversaciones = [];
+  List<Conversacion> conversaciones =
+      [];
 
-  bool cargando = true;
+  bool cargando =
+      true;
 
   String? error;
+
+  bool _socketPreparado =
+      false;
 
   @override
   void initState() {
     super.initState();
 
-    _cargar();
+    _iniciar();
+  }
+
+  // ============================================================
+  // INICIAR
+  // ============================================================
+
+  Future<void> _iniciar() async {
+    await _prepararSocket();
+
+    await _cargar();
+  }
+
+  // ============================================================
+  // SOCKET.IO
+  // ============================================================
+
+  Future<void> _prepararSocket() async {
+    if (_socketPreparado) {
+      return;
+    }
+
+    await ChatSocketService
+        .instance
+        .conectar();
+
+    if (!mounted) {
+      return;
+    }
+
+    // ==========================================================
+    // CUANDO CAMBIA ALGUNA CONVERSACIÓN
+    // ==========================================================
+
+    ChatSocketService
+        .instance
+        .escucharConversacionActualizada(
+      (
+        data,
+      ) {
+        if (!mounted) {
+          return;
+        }
+
+        debugPrint(
+          'CONVERSACIÓN ACTUALIZADA: $data',
+        );
+
+        _cargar(
+          mostrarCarga: false,
+        );
+      },
+    );
+
+    // ==========================================================
+    // CUANDO LLEGA UN MENSAJE
+    //
+    // También actualizamos la lista para que:
+    // - aparezca último mensaje
+    // - cambie el contador
+    // - suba la conversación
+    // ==========================================================
+
+    ChatSocketService
+        .instance
+        .escucharNuevoMensaje(
+      (
+        data,
+      ) {
+        if (!mounted) {
+          return;
+        }
+
+        debugPrint(
+          'NUEVO MENSAJE EN LISTA: $data',
+        );
+
+        _cargar(
+          mostrarCarga: false,
+        );
+      },
+    );
+
+    _socketPreparado =
+        true;
   }
 
   // ============================================================
   // CARGAR
   // ============================================================
 
-  Future<void> _cargar() async {
+  Future<void> _cargar({
+    bool mostrarCarga = true,
+  }) async {
     if (!mounted) {
       return;
     }
 
-    setState(() {
-      cargando = true;
-      error = null;
-    });
+    if (mostrarCarga) {
+      setState(() {
+        cargando =
+            true;
+
+        error =
+            null;
+      });
+    }
 
     try {
       final resultado =
-          await ChatService.listarConversaciones();
+          await ChatService
+              .listarConversaciones();
 
       if (!mounted) {
         return;
@@ -56,7 +154,8 @@ class _ConversacionesScreenState
 
       if (resultado['success'] == true) {
         final dynamic raw =
-            resultado['conversaciones'];
+            resultado[
+                'conversaciones'];
 
         final List<Conversacion> lista =
             [];
@@ -72,16 +171,22 @@ class _ConversacionesScreenState
         }
 
         setState(() {
-          conversaciones = lista;
-          cargando = false;
-          error = null;
+          conversaciones =
+              lista;
+
+          cargando =
+              false;
+
+          error =
+              null;
         });
 
         return;
       }
 
       setState(() {
-        cargando = false;
+        cargando =
+            false;
 
         error =
             resultado['message']
@@ -102,7 +207,8 @@ class _ConversacionesScreenState
       }
 
       setState(() {
-        cargando = false;
+        cargando =
+            false;
 
         error =
             'Error cargando conversaciones';
@@ -120,10 +226,12 @@ class _ConversacionesScreenState
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) {
+        builder:
+            (_) {
           return ChatScreen(
             conversacionId:
                 conversacion.id,
+
             nombreUsuario:
                 conversacion
                     .nombreCompleto,
@@ -136,7 +244,27 @@ class _ConversacionesScreenState
       return;
     }
 
-    await _cargar();
+    await _cargar(
+      mostrarCarga:
+          false,
+    );
+  }
+
+  // ============================================================
+  // DISPOSE
+  // ============================================================
+
+  @override
+  void dispose() {
+    ChatSocketService
+        .instance
+        .dejarDeEscucharConversacionActualizada();
+
+    ChatSocketService
+        .instance
+        .dejarDeEscucharNuevoMensaje();
+
+    super.dispose();
   }
 
   // ============================================================
@@ -152,7 +280,8 @@ class _ConversacionesScreenState
           Theme.of(context)
               .scaffoldBackgroundColor,
 
-      appBar: AppBar(
+      appBar:
+          AppBar(
         automaticallyImplyLeading:
             false,
 
@@ -168,15 +297,38 @@ class _ConversacionesScreenState
         title:
             const Text(
           'Mensajes',
-          style: TextStyle(
+          style:
+              TextStyle(
             fontWeight:
                 FontWeight.bold,
           ),
         ),
+
+        actions: [
+          IconButton(
+            tooltip:
+                'Actualizar',
+
+            onPressed:
+                () {
+              _cargar(
+                mostrarCarga:
+                    false,
+              );
+            },
+
+            icon:
+                const Icon(
+              Icons.refresh,
+            ),
+          ),
+        ],
       ),
 
-      body: SizedBox.expand(
-        child: _contenido(),
+      body:
+          SizedBox.expand(
+        child:
+            _contenido(),
       ),
     );
   }
@@ -205,45 +357,60 @@ class _ConversacionesScreenState
     // ==========================================================
 
     if (error != null) {
-      return Center(
+      return RefreshIndicator(
+        color:
+            naranja,
+
+        onRefresh:
+            _cargar,
+
         child:
-            SingleChildScrollView(
-          padding:
-              const EdgeInsets.all(
-            30,
-          ),
+            ListView(
+          physics:
+              const AlwaysScrollableScrollPhysics(),
 
-          child:
-              Column(
-            mainAxisSize:
-                MainAxisSize.min,
+          children: [
+            const SizedBox(
+              height:
+                  150,
+            ),
 
-            children: [
-              const Icon(
-                Icons.error_outline,
-                size:
-                    65,
-                color:
-                    naranja,
+            const Icon(
+              Icons.error_outline,
+              size:
+                  65,
+              color:
+                  naranja,
+            ),
+
+            const SizedBox(
+              height:
+                  20,
+            ),
+
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(
+                horizontal:
+                    30,
               ),
 
-              const SizedBox(
-                height:
-                    20,
-              ),
-
-              Text(
+              child:
+                  Text(
                 error!,
                 textAlign:
                     TextAlign.center,
               ),
+            ),
 
-              const SizedBox(
-                height:
-                    20,
-              ),
+            const SizedBox(
+              height:
+                  20,
+            ),
 
-              FilledButton(
+            Center(
+              child:
+                  FilledButton(
                 style:
                     FilledButton.styleFrom(
                   backgroundColor:
@@ -254,15 +421,17 @@ class _ConversacionesScreenState
                 ),
 
                 onPressed:
-                    _cargar,
+                    () {
+                  _cargar();
+                },
 
                 child:
                     const Text(
                   'Reintentar',
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     }
@@ -272,204 +441,294 @@ class _ConversacionesScreenState
     // ==========================================================
 
     if (conversaciones.isEmpty) {
-      return const Center(
+      return RefreshIndicator(
+        color:
+            naranja,
+
+        onRefresh:
+            _cargar,
+
         child:
+            ListView(
+          physics:
+              const AlwaysScrollableScrollPhysics(),
+
+          children:
+              const [
+            SizedBox(
+              height:
+                  170,
+            ),
+
+            Icon(
+              Icons
+                  .chat_bubble_outline,
+              size:
+                  70,
+              color:
+                  naranja,
+            ),
+
+            SizedBox(
+              height:
+                  20,
+            ),
+
+            Text(
+              'Todavía no tienes conversaciones',
+              textAlign:
+                  TextAlign.center,
+
+              style:
+                  TextStyle(
+                fontSize:
+                    18,
+
+                fontWeight:
+                    FontWeight.bold,
+              ),
+            ),
+
+            SizedBox(
+              height:
+                  8,
+            ),
+
             Padding(
-          padding:
-              EdgeInsets.all(
-            30,
-          ),
-
-          child:
-              Column(
-            mainAxisSize:
-                MainAxisSize.min,
-
-            children: [
-              Icon(
-                Icons
-                    .chat_bubble_outline,
-                size:
-                    70,
-                color:
-                    naranja,
+              padding:
+                  EdgeInsets.symmetric(
+                horizontal:
+                    40,
               ),
 
-              SizedBox(
-                height:
-                    20,
-              ),
-
-              Text(
-                'Todavía no tienes conversaciones',
-                textAlign:
-                    TextAlign.center,
-                style:
-                    TextStyle(
-                  fontSize:
-                      18,
-                  fontWeight:
-                      FontWeight.bold,
-                ),
-              ),
-
-              SizedBox(
-                height:
-                    8,
-              ),
-
-              Text(
+              child:
+                  Text(
                 'Cuando inicies una conversación aparecerá aquí.',
                 textAlign:
                     TextAlign.center,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     }
 
     // ==========================================================
-    // CONVERSACIONES
+    // LISTA
     // ==========================================================
 
-    return ListView.builder(
-      padding:
-          const EdgeInsets.symmetric(
-        vertical:
-            8,
-      ),
+    return RefreshIndicator(
+      color:
+          naranja,
 
-      itemCount:
-          conversaciones.length,
+      onRefresh:
+          _cargar,
 
-      itemBuilder:
-          (
-            context,
-            index,
-          ) {
-        final conversacion =
-            conversaciones[index];
+      child:
+          ListView.separated(
+        physics:
+            const AlwaysScrollableScrollPhysics(),
 
-        return ListTile(
-          contentPadding:
-              const EdgeInsets.symmetric(
-            horizontal:
-                18,
+        padding:
+            const EdgeInsets.symmetric(
+          vertical:
+              8,
+        ),
 
-            vertical:
-                6,
-          ),
+        itemCount:
+            conversaciones.length,
 
-          leading:
-              CircleAvatar(
-            radius:
-                25,
+        separatorBuilder:
+            (
+              _,
+              __,
+            ) {
+          return const Divider(
+            height:
+                1,
+          );
+        },
 
-            backgroundColor:
-                naranja,
+        itemBuilder:
+            (
+              context,
+              index,
+            ) {
+          final conversacion =
+              conversaciones[
+                  index];
 
-            foregroundColor:
-                Colors.white,
+          return ListTile(
+            contentPadding:
+                const EdgeInsets.symmetric(
+              horizontal:
+                  18,
 
-            child:
-                Text(
-              conversacion
-                      .nombre
-                      .isNotEmpty
-                  ? conversacion
-                      .nombre[0]
-                      .toUpperCase()
-                  : '?',
+              vertical:
+                  7,
+            ),
 
-              style:
-                  const TextStyle(
-                fontWeight:
-                    FontWeight.bold,
+            // ==================================================
+            // AVATAR
+            // ==================================================
+
+            leading:
+                CircleAvatar(
+              radius:
+                  26,
+
+              backgroundColor:
+                  naranja,
+
+              foregroundColor:
+                  Colors.white,
+
+              child:
+                  Text(
+                conversacion
+                        .nombre
+                        .isNotEmpty
+                    ? conversacion
+                        .nombre[0]
+                        .toUpperCase()
+                    : '?',
+
+                style:
+                    const TextStyle(
+                  fontWeight:
+                      FontWeight.bold,
+                ),
               ),
             ),
-          ),
 
-          title:
-              Text(
-            conversacion
-                .nombreCompleto,
+            // ==================================================
+            // NOMBRE
+            // ==================================================
 
-            maxLines:
-                1,
-
-            overflow:
-                TextOverflow
-                    .ellipsis,
-
-            style:
-                const TextStyle(
-              fontWeight:
-                  FontWeight.w600,
-            ),
-          ),
-
-          subtitle:
-              Text(
-            conversacion
-                    .ultimoMensaje ??
-                'Nueva conversación',
-
-            maxLines:
-                1,
-
-            overflow:
-                TextOverflow
-                    .ellipsis,
-          ),
-
-          trailing:
+            title:
+                Text(
               conversacion
-                          .mensajesNoLeidos >
-                      0
-                  ? Container(
-                      width:
-                          24,
-                      height:
-                          24,
-                      alignment:
-                          Alignment.center,
-                      decoration:
-                          const BoxDecoration(
-                        color:
-                            naranja,
-                        shape:
-                            BoxShape.circle,
-                      ),
-                      child:
-                          Text(
-                        conversacion
-                            .mensajesNoLeidos
-                            .toString(),
-                        style:
-                            const TextStyle(
-                          color:
-                              Colors.white,
-                          fontSize:
-                              11,
-                          fontWeight:
-                              FontWeight.bold,
-                        ),
-                      ),
-                    )
-                  : const Icon(
-                      Icons
-                          .chevron_right,
-                    ),
+                  .nombreCompleto,
 
-          onTap:
-              () {
-            _abrir(
-              conversacion,
-            );
-          },
-        );
-      },
+              maxLines:
+                  1,
+
+              overflow:
+                  TextOverflow
+                      .ellipsis,
+
+              style:
+                  TextStyle(
+                fontWeight:
+                    conversacion
+                                .mensajesNoLeidos >
+                            0
+                        ? FontWeight.bold
+                        : FontWeight.w600,
+              ),
+            ),
+
+            // ==================================================
+            // ÚLTIMO MENSAJE
+            // ==================================================
+
+            subtitle:
+                Text(
+              conversacion
+                      .ultimoMensaje ??
+                  'Nueva conversación',
+
+              maxLines:
+                  1,
+
+              overflow:
+                  TextOverflow
+                      .ellipsis,
+
+              style:
+                  TextStyle(
+                fontWeight:
+                    conversacion
+                                .mensajesNoLeidos >
+                            0
+                        ? FontWeight.w600
+                        : FontWeight.normal,
+              ),
+            ),
+
+            // ==================================================
+            // NO LEÍDOS
+            // ==================================================
+
+            trailing:
+                conversacion
+                            .mensajesNoLeidos >
+                        0
+                    ? Container(
+                        constraints:
+                            const BoxConstraints(
+                          minWidth:
+                              24,
+
+                          minHeight:
+                              24,
+                        ),
+
+                        padding:
+                            const EdgeInsets.symmetric(
+                          horizontal:
+                              7,
+                        ),
+
+                        alignment:
+                            Alignment.center,
+
+                        decoration:
+                            const BoxDecoration(
+                          color:
+                              naranja,
+
+                          shape:
+                              BoxShape.circle,
+                        ),
+
+                        child:
+                            Text(
+                          conversacion
+                              .mensajesNoLeidos
+                              .toString(),
+
+                          style:
+                              const TextStyle(
+                            color:
+                                Colors.white,
+
+                            fontSize:
+                                11,
+
+                            fontWeight:
+                                FontWeight.bold,
+                          ),
+                        ),
+                      )
+                    : const Icon(
+                        Icons
+                            .chevron_right,
+                      ),
+
+            // ==================================================
+            // ABRIR
+            // ==================================================
+
+            onTap:
+                () {
+              _abrir(
+                conversacion,
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

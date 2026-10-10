@@ -2,28 +2,32 @@ import 'package:flutter/material.dart';
 
 import '../../models/mensaje.dart';
 import '../../services/chat_service.dart';
+import '../../services/chat_socket_service.dart';
 
-class ChatScreen
-    extends StatefulWidget {
+class ChatScreen extends StatefulWidget {
   final int conversacionId;
   final String nombreUsuario;
+  final String? imagenUsuarioUrl;
 
   const ChatScreen({
     super.key,
     required this.conversacionId,
     required this.nombreUsuario,
+    this.imagenUsuarioUrl,
   });
 
   @override
-  State<ChatScreen>
-      createState() =>
-          _ChatScreenState();
+  State<ChatScreen> createState() =>
+      _ChatScreenState();
 }
 
 class _ChatScreenState
     extends State<ChatScreen> {
   static const Color naranja =
       Color(0xFFFF7E01);
+
+  static const Color panelOscuro =
+      Color(0xFF2A2045);
 
   final TextEditingController
       mensajeController =
@@ -44,15 +48,144 @@ class _ChatScreenState
 
   String? error;
 
+  bool _socketPreparado =
+      false;
+
   @override
   void initState() {
     super.initState();
 
-    _cargarMensajes();
+    _iniciar();
   }
 
-  Future<void>
-      _cargarMensajes() async {
+  // ============================================================
+  // INICIAR
+  // ============================================================
+
+  Future<void> _iniciar() async {
+    await _prepararSocket();
+
+    await _cargarMensajes();
+  }
+
+  // ============================================================
+  // SOCKET
+  // ============================================================
+
+  Future<void> _prepararSocket() async {
+    if (_socketPreparado) {
+      return;
+    }
+
+    await ChatSocketService
+        .instance
+        .conectar();
+
+    if (!mounted) {
+      return;
+    }
+
+    // ==========================================================
+    // ENTRAR A LA SALA
+    // ==========================================================
+
+    ChatSocketService
+        .instance
+        .entrarConversacion(
+      widget.conversacionId,
+    );
+
+    // ==========================================================
+    // ESCUCHAR MENSAJES
+    // ==========================================================
+
+    ChatSocketService
+        .instance
+        .escucharNuevoMensaje(
+      (
+        data,
+      ) async {
+        if (!mounted) {
+          return;
+        }
+
+        final int? conversacionId =
+            int.tryParse(
+          data['conversacion_id']
+              ?.toString() ??
+              '',
+        );
+
+        if (
+          conversacionId !=
+          widget.conversacionId
+        ) {
+          return;
+        }
+
+        try {
+          final mensaje =
+              Mensaje.fromJson(
+            data,
+          );
+
+          final yaExiste =
+              mensajes.any(
+            (m) =>
+                m.id ==
+                mensaje.id,
+          );
+
+          if (yaExiste) {
+            return;
+          }
+
+          setState(() {
+            mensajes.add(
+              mensaje,
+            );
+          });
+
+          await ChatService
+              .marcarComoLeidos(
+            conversacionId:
+                widget
+                    .conversacionId,
+          );
+
+          _bajar();
+        } catch (e) {
+          debugPrint(
+            'ERROR PARSEANDO MENSAJE SOCKET: $e',
+          );
+        }
+      },
+    );
+
+    _socketPreparado =
+        true;
+  }
+
+  // ============================================================
+  // CARGAR MENSAJES
+  // ============================================================
+
+  Future<void> _cargarMensajes({
+    bool mostrarCarga = true,
+  }) async {
+    if (
+      mostrarCarga &&
+      mounted
+    ) {
+      setState(() {
+        cargando =
+            true;
+
+        error =
+            null;
+      });
+    }
+
     final resultado =
         await ChatService
             .obtenerMensajes(
@@ -64,12 +197,30 @@ class _ChatScreenState
       return;
     }
 
-    if (resultado['success'] ==
-        true) {
+    if (
+      resultado['success'] ==
+      true
+    ) {
+      final dynamic raw =
+          resultado[
+              'mensajes'];
+
+      final List<Mensaje> lista =
+          [];
+
+      if (raw is List) {
+        for (final item in raw) {
+          if (item is Mensaje) {
+            lista.add(
+              item,
+            );
+          }
+        }
+      }
+
       setState(() {
         mensajes =
-            resultado[
-                'mensajes'];
+            lista;
 
         cargando =
             false;
@@ -81,7 +232,8 @@ class _ChatScreenState
       await ChatService
           .marcarComoLeidos(
         conversacionId:
-            widget.conversacionId,
+            widget
+                .conversacionId,
       );
 
       _bajar();
@@ -94,17 +246,25 @@ class _ChatScreenState
           false;
 
       error =
-          resultado['message'] ??
+          resultado['message']
+                  ?.toString() ??
               'No se pudieron cargar los mensajes';
     });
   }
 
+  // ============================================================
+  // BAJAR AL ÚLTIMO MENSAJE
+  // ============================================================
+
   void _bajar() {
-    WidgetsBinding.instance
+    WidgetsBinding
+        .instance
         .addPostFrameCallback(
       (_) {
-        if (!scrollController
-            .hasClients) {
+        if (
+          !scrollController
+              .hasClients
+        ) {
           return;
         }
 
@@ -113,11 +273,13 @@ class _ChatScreenState
           scrollController
               .position
               .maxScrollExtent,
+
           duration:
               const Duration(
             milliseconds:
                 250,
           ),
+
           curve:
               Curves.easeOut,
         );
@@ -125,14 +287,19 @@ class _ChatScreenState
     );
   }
 
-  Future<void>
-      _enviarMensaje() async {
+  // ============================================================
+  // ENVIAR
+  // ============================================================
+
+  Future<void> _enviarMensaje() async {
     final contenido =
         mensajeController.text
             .trim();
 
-    if (contenido.isEmpty ||
-        enviando) {
+    if (
+      contenido.isEmpty ||
+      enviando
+    ) {
       return;
     }
 
@@ -146,6 +313,7 @@ class _ChatScreenState
             .enviarMensaje(
       conversacionId:
           widget.conversacionId,
+
       contenido:
           contenido,
     );
@@ -159,30 +327,103 @@ class _ChatScreenState
           false;
     });
 
-    if (resultado['success'] !=
-        true) {
+    if (
+      resultado['success'] !=
+      true
+    ) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(
-        SnackBar(
-          content:
-              Text(
-            resultado['message'] ??
-                'No se pudo enviar el mensaje',
+      )
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content:
+                Text(
+              resultado['message']
+                      ?.toString() ??
+                  'No se pudo enviar el mensaje',
+            ),
           ),
-        ),
-      );
+        );
 
       return;
     }
 
-    mensajeController.clear();
+    mensajeController
+        .clear();
 
-    // El endpoint de envío no incluye
-    // "es_mio", por eso refrescamos
-    // desde el servidor.
-    await _cargarMensajes();
+    // ==========================================================
+    // AGREGAR MENSAJE DIRECTAMENTE
+    // ==========================================================
+
+    final dynamic rawMensaje =
+        resultado['mensaje'];
+
+    if (
+      rawMensaje is Mensaje
+    ) {
+      final yaExiste =
+          mensajes.any(
+        (m) =>
+            m.id ==
+            rawMensaje.id,
+      );
+
+      if (!yaExiste) {
+        setState(() {
+          mensajes.add(
+            rawMensaje,
+          );
+        });
+      }
+    } else if (
+      rawMensaje is Map
+    ) {
+      try {
+        final mensaje =
+            Mensaje.fromJson(
+          Map<String, dynamic>.from(
+            rawMensaje,
+          ),
+        );
+
+        final yaExiste =
+            mensajes.any(
+          (m) =>
+              m.id ==
+              mensaje.id,
+        );
+
+        if (!yaExiste) {
+          setState(() {
+            mensajes.add(
+              mensaje,
+            );
+          });
+        }
+      } catch (e) {
+        debugPrint(
+          'ERROR AGREGANDO MENSAJE ENVIADO: $e',
+        );
+
+        await _cargarMensajes(
+          mostrarCarga:
+              false,
+        );
+      }
+    } else {
+      await _cargarMensajes(
+        mostrarCarga:
+            false,
+      );
+    }
+
+    _bajar();
   }
+
+  // ============================================================
+  // HORA
+  // ============================================================
 
   String _hora(
     DateTime fecha,
@@ -194,13 +435,87 @@ class _ChatScreenState
         '${local.minute.toString().padLeft(2, '0')}';
   }
 
+  // ============================================================
+  // AVATAR SUPERIOR
+  // ============================================================
+
+  Widget _avatarUsuario() {
+    final String? url =
+        widget
+            .imagenUsuarioUrl;
+
+    final String inicial =
+        widget
+                .nombreUsuario
+                .trim()
+                .isNotEmpty
+            ? widget
+                .nombreUsuario
+                .trim()[0]
+                .toUpperCase()
+            : '?';
+
+    return CircleAvatar(
+      radius:
+          19,
+
+      backgroundColor:
+          naranja,
+
+      foregroundColor:
+          Colors.white,
+
+      backgroundImage:
+          url != null &&
+                  url.isNotEmpty
+              ? NetworkImage(
+                  url,
+                )
+              : null,
+
+      child:
+          url == null ||
+                  url.isEmpty
+              ? Text(
+                  inicial,
+                  style:
+                      const TextStyle(
+                    fontWeight:
+                        FontWeight.bold,
+                  ),
+                )
+              : null,
+    );
+  }
+
+  // ============================================================
+  // DISPOSE
+  // ============================================================
+
   @override
   void dispose() {
-    mensajeController.dispose();
-    scrollController.dispose();
+    ChatSocketService
+        .instance
+        .salirConversacion(
+      widget.conversacionId,
+    );
+
+    ChatSocketService
+        .instance
+        .dejarDeEscucharNuevoMensaje();
+
+    mensajeController
+        .dispose();
+
+    scrollController
+        .dispose();
 
     super.dispose();
   }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
   Widget build(
@@ -214,35 +529,42 @@ class _ChatScreenState
     return Scaffold(
       appBar:
           AppBar(
+        titleSpacing:
+            6,
+
         title:
             Row(
           children: [
-            const CircleAvatar(
-              radius:
-                  18,
-              backgroundColor:
-                  naranja,
-              foregroundColor:
-                  Colors.white,
-              child:
-                  Icon(
-                Icons.person,
-              ),
-            ),
+            // ==================================================
+            // FOTO DEL USUARIO
+            // ==================================================
+
+            _avatarUsuario(),
 
             const SizedBox(
               width:
                   10,
             ),
 
+            // ==================================================
+            // NOMBRE
+            // ==================================================
+
             Expanded(
               child:
                   Text(
                 widget
                     .nombreUsuario,
+
                 overflow:
                     TextOverflow
                         .ellipsis,
+
+                style:
+                    const TextStyle(
+                  fontWeight:
+                      FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -267,9 +589,17 @@ class _ChatScreenState
     );
   }
 
+  // ============================================================
+  // LISTA MENSAJES
+  // ============================================================
+
   Widget _listaMensajes(
     bool oscuro,
   ) {
+    // ==========================================================
+    // CARGANDO
+    // ==========================================================
+
     if (cargando) {
       return const Center(
         child:
@@ -280,6 +610,10 @@ class _ChatScreenState
       );
     }
 
+    // ==========================================================
+    // ERROR
+    // ==========================================================
+
     if (error != null) {
       return Center(
         child:
@@ -288,10 +622,12 @@ class _ChatScreenState
               const EdgeInsets.all(
             30,
           ),
+
           child:
               Column(
             mainAxisSize:
                 MainAxisSize.min,
+
             children: [
               const Icon(
                 Icons
@@ -319,8 +655,20 @@ class _ChatScreenState
               ),
 
               FilledButton(
+                style:
+                    FilledButton.styleFrom(
+                  backgroundColor:
+                      naranja,
+
+                  foregroundColor:
+                      Colors.white,
+                ),
+
                 onPressed:
-                    _cargarMensajes,
+                    () {
+                  _cargarMensajes();
+                },
+
                 child:
                     const Text(
                   'Reintentar',
@@ -332,7 +680,13 @@ class _ChatScreenState
       );
     }
 
-    if (mensajes.isEmpty) {
+    // ==========================================================
+    // VACÍO
+    // ==========================================================
+
+    if (
+      mensajes.isEmpty
+    ) {
       return const Center(
         child:
             Padding(
@@ -340,10 +694,12 @@ class _ChatScreenState
               EdgeInsets.all(
             30,
           ),
+
           child:
               Column(
             mainAxisSize:
                 MainAxisSize.min,
+
             children: [
               Icon(
                 Icons
@@ -365,6 +721,7 @@ class _ChatScreenState
                     TextStyle(
                   fontSize:
                       18,
+
                   fontWeight:
                       FontWeight.bold,
                 ),
@@ -384,6 +741,10 @@ class _ChatScreenState
       );
     }
 
+    // ==========================================================
+    // MENSAJES
+    // ==========================================================
+
     return ListView.builder(
       controller:
           scrollController,
@@ -400,12 +761,17 @@ class _ChatScreenState
           mensajes.length,
 
       itemBuilder:
-          (context, index) {
+          (
+            context,
+            index,
+          ) {
         final mensaje =
-            mensajes[index];
+            mensajes[
+                index];
 
-        final esMio =
-            mensaje.esMio;
+        final bool esMio =
+            mensaje
+                .esMio;
 
         return Align(
           alignment:
@@ -446,9 +812,7 @@ class _ChatScreenState
                   esMio
                       ? naranja
                       : oscuro
-                          ? const Color(
-                              0xFF2A2045,
-                            )
+                          ? panelOscuro
                           : Colors
                               .grey
                               .shade200,
@@ -459,16 +823,19 @@ class _ChatScreenState
                     const Radius.circular(
                   17,
                 ),
+
                 topRight:
                     const Radius.circular(
                   17,
                 ),
+
                 bottomLeft:
                     Radius.circular(
                   esMio
                       ? 17
                       : 4,
                 ),
+
                 bottomRight:
                     Radius.circular(
                   esMio
@@ -487,18 +854,19 @@ class _ChatScreenState
                 Align(
                   alignment:
                       Alignment.centerLeft,
+
                   child:
                       Text(
-                    mensaje.contenido,
+                    mensaje
+                        .contenido,
+
                     style:
                         TextStyle(
                       color:
                           esMio ||
                                   oscuro
-                              ? Colors
-                                  .white
-                              : Colors
-                                  .black87,
+                              ? Colors.white
+                              : Colors.black87,
 
                       fontSize:
                           15,
@@ -521,12 +889,12 @@ class _ChatScreenState
                         mensaje
                             .createdAt,
                       ),
+
                       style:
                           TextStyle(
                         color:
                             esMio
-                                ? Colors
-                                    .white70
+                                ? Colors.white70
                                 : oscuro
                                     ? Colors.white60
                                     : Colors.black54,
@@ -543,10 +911,12 @@ class _ChatScreenState
                       ),
 
                       Icon(
-                        mensaje.leido
+                        mensaje
+                                .leido
                             ? Icons
                                 .done_all
-                            : Icons.done,
+                            : Icons
+                                .done,
 
                         size:
                             15,
@@ -564,6 +934,10 @@ class _ChatScreenState
       },
     );
   }
+
+  // ============================================================
+  // BARRA ENVIAR
+  // ============================================================
 
   Widget _barraEnviar(
     bool oscuro,
@@ -625,6 +999,15 @@ class _ChatScreenState
                     TextCapitalization
                         .sentences,
 
+                onSubmitted:
+                    (_) {
+                  if (
+                    !enviando
+                  ) {
+                    _enviarMensaje();
+                  }
+                },
+
                 decoration:
                     InputDecoration(
                   hintText:
@@ -635,10 +1018,9 @@ class _ChatScreenState
 
                   fillColor:
                       oscuro
-                          ? const Color(
-                              0xFF2A2045,
-                            )
-                          : Colors.grey
+                          ? panelOscuro
+                          : Colors
+                              .grey
                               .shade100,
 
                   border:
@@ -647,6 +1029,7 @@ class _ChatScreenState
                         BorderRadius.circular(
                       24,
                     ),
+
                     borderSide:
                         BorderSide.none,
                   ),
@@ -655,6 +1038,7 @@ class _ChatScreenState
                       const EdgeInsets.symmetric(
                     horizontal:
                         17,
+
                     vertical:
                         11,
                   ),
@@ -689,12 +1073,15 @@ class _ChatScreenState
                         ? const SizedBox(
                             width:
                                 20,
+
                             height:
                                 20,
+
                             child:
                                 CircularProgressIndicator(
                               strokeWidth:
                                   2,
+
                               color:
                                   Colors.white,
                             ),
