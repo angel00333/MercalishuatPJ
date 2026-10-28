@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import 'session_service.dart';
+import '../services/firebase_messaging_service.dart';
 
 class AuthService {
   // =========================================
@@ -37,6 +38,10 @@ class AuthService {
           correo: usuario['correo'] ?? correo,
           rol: usuario['rol'] ?? 'usuario',
         );
+
+      await FirebaseMessagingService
+    .instance
+    .registrarFidSiHaySesion();
 
         return {
           'success': true,

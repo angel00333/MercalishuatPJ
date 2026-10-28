@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:mercalishuat/screens/navigation/emprendedor_nav_screen.dart';
 
 import '../../services/theme_service.dart';
+import '../../widgets/campana_notificaciones.dart';
+
 import '../chat/conversaciones_screen.dart';
 import '../mapa_screen.dart';
 import '../explorar/explorar_emprendimientos_screen.dart';
-import '../home_usuario_screen.dart';
 import '../perfil_screen.dart';
 import '../publicaciones/feed_screen.dart';
 
-class UsuarioNavScreen extends StatefulWidget {
+class UsuarioNavScreen
+    extends StatefulWidget {
   final ThemeService themeService;
 
   const UsuarioNavScreen({
@@ -18,8 +19,9 @@ class UsuarioNavScreen extends StatefulWidget {
   });
 
   @override
-  State<UsuarioNavScreen> createState() =>
-      _UsuarioNavScreenState();
+  State<UsuarioNavScreen>
+      createState() =>
+          _UsuarioNavScreenState();
 }
 
 class _UsuarioNavScreenState
@@ -31,22 +33,6 @@ class _UsuarioNavScreenState
   @override
   void initState() {
     super.initState();
-
-    // ==========================================================
-    // PANTALLAS
-    //
-    // Se crean una sola vez.
-    //
-    // IndexedStack permite conservar:
-    //
-    // - estado del mapa
-    // - zoom
-    // - GPS
-    // - rutas
-    // - posición
-    // - estado del feed
-    // - conversaciones
-    // ==========================================================
 
     paginas = [
       const FeedScreen(),
@@ -60,123 +46,160 @@ class _UsuarioNavScreenState
       const ConversacionesScreen(),
 
       PerfilScreen(
-        themeService: widget.themeService,
+        themeService:
+            widget.themeService,
       ),
     ];
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
       // ========================================================
-      // CONTENIDO
+      // PANTALLAS
       // ========================================================
 
-      body: IndexedStack(
-        index: indexActual,
-        children: paginas,
+      body:
+          IndexedStack(
+        index:
+            indexActual,
+
+        children:
+            paginas,
       ),
 
       // ========================================================
-      // NAVEGACIÓN INFERIOR
+      // CAMPANA
       // ========================================================
 
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: indexActual,
+      floatingActionButton:
+          const SafeArea(
+        child:
+            CampanaNotificaciones(),
+      ),
 
-        onDestinationSelected: (index) {
-          if (index == indexActual) {
+      floatingActionButtonLocation:
+          FloatingActionButtonLocation
+              .endFloat,
+
+      // ========================================================
+      // NAVEGACIÓN
+      // ========================================================
+
+      bottomNavigationBar:
+          NavigationBar(
+        selectedIndex:
+            indexActual,
+
+        onDestinationSelected:
+            (
+              index,
+            ) {
+          if (
+            index ==
+            indexActual
+          ) {
             return;
           }
 
           setState(() {
-            indexActual = index;
+            indexActual =
+                index;
           });
         },
 
-        destinations: const [
-          // ====================================================
-          // RECIENTES
-          // ====================================================
-
+        destinations:
+            const [
           NavigationDestination(
-            icon: Icon(
+            icon:
+                Icon(
               Icons.access_time_outlined,
             ),
-            selectedIcon: Icon(
+
+            selectedIcon:
+                Icon(
               Icons.access_time,
             ),
-            label: 'Recientes',
+
+            label:
+                'Recientes',
           ),
 
-          // ====================================================
-          // EXPLORAR
-          // ====================================================
-
           NavigationDestination(
-            icon: Icon(
+            icon:
+                Icon(
               Icons.search_outlined,
             ),
-            selectedIcon: Icon(
+
+            selectedIcon:
+                Icon(
               Icons.search,
             ),
-            label: 'Explorar',
+
+            label:
+                'Explorar',
           ),
 
-          // ====================================================
-          // MAPA
-          // ====================================================
-
           NavigationDestination(
-            icon: Icon(
+            icon:
+                Icon(
               Icons.map_outlined,
             ),
-            selectedIcon: Icon(
+
+            selectedIcon:
+                Icon(
               Icons.map,
             ),
-            label: 'Mapa',
+
+            label:
+                'Mapa',
           ),
 
-          // ====================================================
-          // TIENDAS
-          // ====================================================
-
           NavigationDestination(
-            icon: Icon(
+            icon:
+                Icon(
               Icons.storefront_outlined,
             ),
-            selectedIcon: Icon(
+
+            selectedIcon:
+                Icon(
               Icons.storefront,
             ),
-            label: 'Tiendas',
+
+            label:
+                'Tiendas',
           ),
 
-          // ====================================================
-          // MENSAJES
-          // ====================================================
-
           NavigationDestination(
-            icon: Icon(
+            icon:
+                Icon(
               Icons.chat_bubble_outline,
             ),
-            selectedIcon: Icon(
+
+            selectedIcon:
+                Icon(
               Icons.chat_bubble,
             ),
-            label: 'Mensajes',
+
+            label:
+                'Mensajes',
           ),
 
-          // ====================================================
-          // PERFIL
-          // ====================================================
-
           NavigationDestination(
-            icon: Icon(
+            icon:
+                Icon(
               Icons.person_outline,
             ),
-            selectedIcon: Icon(
+
+            selectedIcon:
+                Icon(
               Icons.person,
             ),
-            label: 'Perfil',
+
+            label:
+                'Perfil',
           ),
         ],
       ),
@@ -184,40 +207,26 @@ class _UsuarioNavScreenState
   }
 }
 
-// ============================================================
-// HOME USUARIO TAB
-// ============================================================
-
-class HomeUsuarioTab extends StatelessWidget {
-  final ThemeService themeService;
-
-  const HomeUsuarioTab({
-    super.key,
-    required this.themeService,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return HomeUsuarioScreen(
-      themeService: themeService,
-    );
-  }
-}
 
 // ============================================================
 // TIENDAS USUARIO
 // ============================================================
 
-class TiendasUsuarioScreen extends StatelessWidget {
+class TiendasUsuarioScreen
+    extends StatelessWidget {
   const TiendasUsuarioScreen({
     super.key,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return const Scaffold(
-      body: Center(
-        child: Text(
+      body:
+          Center(
+        child:
+            Text(
           'Aquí puedes mostrar tiendas destacadas o categorías',
         ),
       ),

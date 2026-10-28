@@ -1,10 +1,20 @@
 class Conversacion {
   final int id;
+
   final int otroUsuarioId;
+
   final String nombre;
+
   final String apellido;
+
+  final String? correo;
+
+  final String? imagenUsuarioUrl;
+
   final String? ultimoMensaje;
+
   final DateTime? ultimoMensajeFecha;
+
   final int mensajesNoLeidos;
 
   const Conversacion({
@@ -12,59 +22,106 @@ class Conversacion {
     required this.otroUsuarioId,
     required this.nombre,
     required this.apellido,
-    required this.ultimoMensaje,
-    required this.ultimoMensajeFecha,
+    this.correo,
+    this.imagenUsuarioUrl,
+    this.ultimoMensaje,
+    this.ultimoMensajeFecha,
     required this.mensajesNoLeidos,
   });
 
   String get nombreCompleto {
-    final valor =
-        '$nombre $apellido'.trim();
+    final partes = [
+      nombre.trim(),
+      apellido.trim(),
+    ].where(
+      (e) => e.isNotEmpty,
+    ).toList();
 
-    return valor.isEmpty
-        ? 'Usuario'
-        : valor;
+    return partes.join(' ');
   }
 
   factory Conversacion.fromJson(
     Map<String, dynamic> json,
   ) {
     return Conversacion(
-      id: int.parse(
-        json['id'].toString(),
-      ),
-      otroUsuarioId: int.parse(
-        json['otro_usuario_id']
-            .toString(),
-      ),
+      id:
+          _toInt(
+            json['id'],
+          ) ??
+          0,
+
+      otroUsuarioId:
+          _toInt(
+            json['otro_usuario_id'],
+          ) ??
+          0,
+
       nombre:
           json['nombre']
-                  ?.toString() ??
-              '',
+              ?.toString() ??
+          '',
+
       apellido:
           json['apellido']
-                  ?.toString() ??
-              '',
+              ?.toString() ??
+          '',
+
+      correo:
+          json['correo']
+              ?.toString(),
+
+      imagenUsuarioUrl:
+          json['imagen_usuario_url']
+              ?.toString(),
+
       ultimoMensaje:
           json['ultimo_mensaje']
               ?.toString(),
+
       ultimoMensajeFecha:
-          json['ultimo_mensaje_fecha'] ==
-                  null
-              ? null
-              : DateTime.tryParse(
-                  json[
-                          'ultimo_mensaje_fecha']
-                      .toString(),
-                ),
+          _toDateTime(
+            json[
+                'ultimo_mensaje_fecha'],
+          ),
+
       mensajesNoLeidos:
-          int.tryParse(
-                json[
-                        'mensajes_no_leidos']
-                    ?.toString() ??
-                    '0',
-              ) ??
-              0,
+          _toInt(
+            json[
+                'mensajes_no_leidos'],
+          ) ??
+          0,
+    );
+  }
+
+  static int? _toInt(
+    dynamic value,
+  ) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is int) {
+      return value;
+    }
+
+    return int.tryParse(
+      value.toString(),
+    );
+  }
+
+  static DateTime? _toDateTime(
+    dynamic value,
+  ) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is DateTime) {
+      return value;
+    }
+
+    return DateTime.tryParse(
+      value.toString(),
     );
   }
 }

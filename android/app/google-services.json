@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "632587006690",
+    "project_id": "mercalishuat",
+    "storage_bucket": "mercalishuat.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:632587006690:android:62a1042f848a7a67e4a4bb",
+        "android_client_info": {
+          "package_name": "com.example.mercalishuat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBV8ujx8zkIJEjXuDPALCoQ_Ma7jfPv_LM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

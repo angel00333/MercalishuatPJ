@@ -20,125 +20,260 @@ class ChatSocketService {
 
   io.Socket? _socket;
 
+  bool _conectando = false;
+
   bool get conectado =>
       _socket?.connected ?? false;
 
+  bool get conectando =>
+      _conectando;
+
+  String? get socketId =>
+      _socket?.id;
+
   // ============================================================
-  // URL BACKEND
+  // CALLBACK DE CONEXIÓN
+  // ============================================================
+
+  void Function()? _callbackConexion;
+
+  // ============================================================
+  // BACKEND
   //
-  // IMPORTANTE:
-  // Socket.IO usa la raíz del backend.
-  //
-  // NO:
-  // https://...railway.app/api
-  //
-  // SÍ:
-  // https://...railway.app
+  // Socket.IO usa la raíz.
+  // NO agregar /api.
   // ============================================================
 
   static const String _socketUrl =
-      'https://mercalishuatbackend-production.up.railway.app';
+      'https://mercalishuatbackend-production-f311.up.railway.app';
 
   // ============================================================
   // CONECTAR
   // ============================================================
 
   Future<void> conectar() async {
-    if (
-      _socket != null &&
-      _socket!.connected
-    ) {
+    if (_socket?.connected == true) {
+      debugPrint(
+        'SOCKET: ya estaba conectado ${_socket?.id}',
+      );
+
       return;
     }
+
+    if (_conectando) {
+      debugPrint(
+        'SOCKET: conexión ya en proceso',
+      );
+
+      return;
+    }
+
+    _conectando = true;
+
+    // ==========================================================
+    // TOKEN
+    // ==========================================================
 
     final String? token =
         await SessionService.obtenerToken();
 
     if (
       token == null ||
-      token.isEmpty
+      token.trim().isEmpty
     ) {
+      _conectando = false;
+
       debugPrint(
-        'SOCKET: no hay token',
+        'SOCKET: no hay token disponible',
       );
 
       return;
     }
 
     // ==========================================================
-    // CERRAR SOCKET ANTERIOR
+    // LIMPIAR SOCKET ANTERIOR
     // ==========================================================
 
-    _socket?.dispose();
+    if (_socket != null) {
+      try {
+        _socket!.disconnect();
+        _socket!.dispose();
+      } catch (e) {
+        debugPrint(
+          'SOCKET: error limpiando conexión anterior: $e',
+        );
+      }
+
+      _socket = null;
+    }
 
     // ==========================================================
     // CREAR SOCKET
     // ==========================================================
 
-    _socket =
-        io.io(
+    _socket = io.io(
       _socketUrl,
       io.OptionBuilder()
           .setTransports(
             [
+              'polling',
               'websocket',
             ],
           )
           .disableAutoConnect()
           .enableReconnection()
           .setReconnectionAttempts(
-            999999,
+            20,
           )
           .setReconnectionDelay(
             1000,
           )
-          .setAuth({
-            'token':
-                token,
-          })
+          .setReconnectionDelayMax(
+            5000,
+          )
+          .setTimeout(
+            10000,
+          )
+          .setAuth(
+            {
+              'token': token,
+            },
+          )
           .build(),
     );
 
     // ==========================================================
-    // EVENTOS CONEXIÓN
+    // CONECTADO
     // ==========================================================
 
     _socket!.onConnect(
       (_) {
+        _conectando = false;
+
         debugPrint(
-          'SOCKET CONECTADO: ${_socket!.id}',
+          'SOCKET CONECTADO: ${_socket?.id}',
         );
+
+        final callback =
+            _callbackConexion;
+
+        if (
+          callback != null
+        ) {
+          callback();
+        }
       },
     );
 
+    // ==========================================================
+    // DESCONECTADO
+    // ==========================================================
+
     _socket!.onDisconnect(
-      (motivo) {
+      (
+        motivo,
+      ) {
+        _conectando = false;
+
         debugPrint(
           'SOCKET DESCONECTADO: $motivo',
         );
       },
     );
 
+    // ==========================================================
+    // ERROR DE CONEXIÓN
+    // ==========================================================
+
     _socket!.onConnectError(
-      (error) {
+      (
+        error,
+      ) {
+        _conectando = false;
+
         debugPrint(
           'SOCKET ERROR CONEXIÓN: $error',
         );
       },
     );
 
+    // ==========================================================
+    // ERROR GENERAL
+    // ==========================================================
+
     _socket!.onError(
-      (error) {
+      (
+        error,
+      ) {
         debugPrint(
           'SOCKET ERROR: $error',
         );
       },
     );
 
+    // ==========================================================
+    // RECONECTADO
+    // ==========================================================
+
     _socket!.onReconnect(
-      (_) {
+      (
+        intento,
+      ) {
+        _conectando = false;
+
         debugPrint(
-          'SOCKET RECONECTADO',
+          'SOCKET RECONECTADO. Intento: $intento',
+        );
+
+        final callback =
+            _callbackConexion;
+
+        if (
+          callback != null
+        ) {
+          callback();
+        }
+      },
+    );
+
+    // ==========================================================
+    // INTENTO DE RECONECTAR
+    // ==========================================================
+
+    _socket!.onReconnectAttempt(
+      (
+        intento,
+      ) {
+        debugPrint(
+          'SOCKET INTENTANDO RECONECTAR: $intento',
+        );
+      },
+    );
+
+    // ==========================================================
+    // ERROR RECONECTANDO
+    // ==========================================================
+
+    _socket!.onReconnectError(
+      (
+        error,
+      ) {
+        debugPrint(
+          'SOCKET ERROR RECONECTANDO: $error',
+        );
+      },
+    );
+
+    // ==========================================================
+    // RECONEXIÓN FALLIDA
+    // ==========================================================
+
+    _socket!.onReconnectFailed(
+      (_) {
+        _conectando = false;
+
+        debugPrint(
+          'SOCKET: falló la reconexión',
         );
       },
     );
@@ -146,6 +281,10 @@ class ChatSocketService {
     // ==========================================================
     // CONECTAR
     // ==========================================================
+
+    debugPrint(
+      'SOCKET: conectando a $_socketUrl',
+    );
 
     _socket!.connect();
   }
@@ -158,9 +297,24 @@ class ChatSocketService {
     int conversacionId,
   ) {
     if (
-      _socket == null ||
+      _socket == null
+    ) {
+      debugPrint(
+        'SOCKET: no existe socket para entrar a conversación',
+      );
+
+      return;
+    }
+
+    if (
       !_socket!.connected
     ) {
+      debugPrint(
+        'SOCKET: todavía no conectado. '
+        'Se entrará a conversación $conversacionId '
+        'cuando conecte.',
+      );
+
       return;
     }
 
@@ -170,7 +324,7 @@ class ChatSocketService {
     );
 
     debugPrint(
-      'SOCKET: entrar conversación $conversacionId',
+      'SOCKET: entrar_conversacion -> $conversacionId',
     );
   }
 
@@ -194,7 +348,7 @@ class ChatSocketService {
     );
 
     debugPrint(
-      'SOCKET: salir conversación $conversacionId',
+      'SOCKET: salir_conversacion -> $conversacionId',
     );
   }
 
@@ -207,16 +361,32 @@ class ChatSocketService {
       Map<String, dynamic> mensaje,
     ) callback,
   ) {
-    _socket?.off(
+    if (
+      _socket == null
+    ) {
+      debugPrint(
+        'SOCKET: no existe para escuchar nuevo_mensaje',
+      );
+
+      return;
+    }
+
+    _socket!.off(
       'nuevo_mensaje',
     );
 
-    _socket?.on(
+    _socket!.on(
       'nuevo_mensaje',
       (
         data,
       ) {
-        if (data is Map) {
+        debugPrint(
+          'SOCKET nuevo_mensaje: $data',
+        );
+
+        if (
+          data is Map
+        ) {
           callback(
             Map<String, dynamic>.from(
               data,
@@ -228,36 +398,7 @@ class ChatSocketService {
   }
 
   // ============================================================
-  // ESCUCHAR CAMBIOS EN CONVERSACIONES
-  // ============================================================
-
-  void escucharConversacionActualizada(
-    void Function(
-      Map<String, dynamic> data,
-    ) callback,
-  ) {
-    _socket?.off(
-      'conversacion_actualizada',
-    );
-
-    _socket?.on(
-      'conversacion_actualizada',
-      (
-        data,
-      ) {
-        if (data is Map) {
-          callback(
-            Map<String, dynamic>.from(
-              data,
-            ),
-          );
-        }
-      },
-    );
-  }
-
-  // ============================================================
-  // QUITAR LISTENER NUEVO MENSAJE
+  // DEJAR DE ESCUCHAR NUEVO MENSAJE
   // ============================================================
 
   void dejarDeEscucharNuevoMensaje() {
@@ -267,7 +408,52 @@ class ChatSocketService {
   }
 
   // ============================================================
-  // QUITAR LISTENER CONVERSACIONES
+  // ESCUCHAR CONVERSACIÓN ACTUALIZADA
+  // ============================================================
+
+  void escucharConversacionActualizada(
+    void Function(
+      Map<String, dynamic> data,
+    ) callback,
+  ) {
+    if (
+      _socket == null
+    ) {
+      debugPrint(
+        'SOCKET: no existe para escuchar conversacion_actualizada',
+      );
+
+      return;
+    }
+
+    _socket!.off(
+      'conversacion_actualizada',
+    );
+
+    _socket!.on(
+      'conversacion_actualizada',
+      (
+        data,
+      ) {
+        debugPrint(
+          'SOCKET conversacion_actualizada: $data',
+        );
+
+        if (
+          data is Map
+        ) {
+          callback(
+            Map<String, dynamic>.from(
+              data,
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  // ============================================================
+  // DEJAR DE ESCUCHAR CONVERSACIÓN ACTUALIZADA
   // ============================================================
 
   void dejarDeEscucharConversacionActualizada() {
@@ -277,12 +463,345 @@ class ChatSocketService {
   }
 
   // ============================================================
+  // ESCUCHAR MENSAJES LEÍDOS
+  // ============================================================
+
+  void escucharMensajesLeidos(
+    void Function(
+      Map<String, dynamic> data,
+    ) callback,
+  ) {
+    if (
+      _socket == null
+    ) {
+      debugPrint(
+        'SOCKET: no existe para escuchar mensajes_leidos',
+      );
+
+      return;
+    }
+
+    _socket!.off(
+      'mensajes_leidos',
+    );
+
+    _socket!.on(
+      'mensajes_leidos',
+      (
+        data,
+      ) {
+        debugPrint(
+          'SOCKET mensajes_leidos: $data',
+        );
+
+        if (
+          data is Map
+        ) {
+          callback(
+            Map<String, dynamic>.from(
+              data,
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  // ============================================================
+  // DEJAR DE ESCUCHAR MENSAJES LEÍDOS
+  // ============================================================
+
+  void dejarDeEscucharMensajesLeidos() {
+    _socket?.off(
+      'mensajes_leidos',
+    );
+  }
+
+  // ============================================================
+  // ESCUCHAR CONEXIÓN
+  // ============================================================
+
+  void escucharConexion(
+    void Function() callback,
+  ) {
+    _callbackConexion =
+        callback;
+
+    if (
+      _socket?.connected ==
+      true
+    ) {
+      callback();
+    }
+  }
+
+  // ============================================================
+  // DEJAR DE ESCUCHAR CONEXIÓN
+  // ============================================================
+
+  void dejarDeEscucharConexion() {
+    _callbackConexion =
+        null;
+  }
+
+  // ============================================================
+  // NUEVA NOTIFICACIÓN
+  // ============================================================
+
+  void escucharNuevaNotificacion(
+    void Function(
+      Map<String, dynamic> data,
+    ) callback,
+  ) {
+    if (
+      _socket == null
+    ) {
+      debugPrint(
+        'SOCKET: no existe para escuchar nueva_notificacion',
+      );
+
+      return;
+    }
+
+    _socket!.off(
+      'nueva_notificacion',
+    );
+
+    _socket!.on(
+      'nueva_notificacion',
+      (
+        data,
+      ) {
+        debugPrint(
+          'SOCKET nueva_notificacion: $data',
+        );
+
+        if (
+          data is Map
+        ) {
+          callback(
+            Map<String, dynamic>.from(
+              data,
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  // ============================================================
+  // DEJAR DE ESCUCHAR NUEVA NOTIFICACIÓN
+  // ============================================================
+
+  void dejarDeEscucharNuevaNotificacion() {
+    _socket?.off(
+      'nueva_notificacion',
+    );
+  }
+
+  // ============================================================
+  // CONTADOR DE NOTIFICACIONES
+  // ============================================================
+
+  void escucharContadorNotificaciones(
+    void Function(
+      Map<String, dynamic> data,
+    ) callback,
+  ) {
+    if (
+      _socket == null
+    ) {
+      debugPrint(
+        'SOCKET: no existe para escuchar contador_notificaciones',
+      );
+
+      return;
+    }
+
+    _socket!.off(
+      'contador_notificaciones',
+    );
+
+    _socket!.on(
+      'contador_notificaciones',
+      (
+        data,
+      ) {
+        debugPrint(
+          'SOCKET contador_notificaciones: $data',
+        );
+
+        if (
+          data is Map
+        ) {
+          callback(
+            Map<String, dynamic>.from(
+              data,
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  // ============================================================
+  // DEJAR DE ESCUCHAR CONTADOR
+  // ============================================================
+
+  void dejarDeEscucharContadorNotificaciones() {
+    _socket?.off(
+      'contador_notificaciones',
+    );
+  }
+
+  // ============================================================
+  // NOTIFICACIONES ACTUALIZADAS
+  // ============================================================
+
+  void escucharNotificacionesActualizadas(
+    void Function(
+      Map<String, dynamic> data,
+    ) callback,
+  ) {
+    if (
+      _socket == null
+    ) {
+      debugPrint(
+        'SOCKET: no existe para escuchar notificaciones_actualizadas',
+      );
+
+      return;
+    }
+
+    _socket!.off(
+      'notificaciones_actualizadas',
+    );
+
+    _socket!.on(
+      'notificaciones_actualizadas',
+      (
+        data,
+      ) {
+        debugPrint(
+          'SOCKET notificaciones_actualizadas: $data',
+        );
+
+        if (
+          data is Map
+        ) {
+          callback(
+            Map<String, dynamic>.from(
+              data,
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  // ============================================================
+  // DEJAR DE ESCUCHAR NOTIFICACIONES ACTUALIZADAS
+  // ============================================================
+
+  void dejarDeEscucharNotificacionesActualizadas() {
+    _socket?.off(
+      'notificaciones_actualizadas',
+    );
+  }
+
+  // ============================================================
+  // EMITIR EVENTO GENÉRICO
+  // ============================================================
+
+  void emitir(
+    String evento,
+    dynamic data,
+  ) {
+    if (
+      _socket == null ||
+      !_socket!.connected
+    ) {
+      debugPrint(
+        'SOCKET: no conectado. '
+        'No se pudo emitir $evento',
+      );
+
+      return;
+    }
+
+    _socket!.emit(
+      evento,
+      data,
+    );
+  }
+
+  // ============================================================
   // DESCONECTAR
+  //
+  // Usar al cerrar sesión.
+  // NO al cambiar de pantalla.
   // ============================================================
 
   void desconectar() {
-    _socket?.disconnect();
-    _socket?.dispose();
+    _conectando =
+        false;
+
+    _callbackConexion =
+        null;
+
+    if (
+      _socket == null
+    ) {
+      return;
+    }
+
+    try {
+      // ========================================================
+      // CHAT
+      // ========================================================
+
+      _socket!.off(
+        'nuevo_mensaje',
+      );
+
+      _socket!.off(
+        'conversacion_actualizada',
+      );
+
+      _socket!.off(
+        'mensajes_leidos',
+      );
+
+      // ========================================================
+      // NOTIFICACIONES
+      // ========================================================
+
+      _socket!.off(
+        'nueva_notificacion',
+      );
+
+      _socket!.off(
+        'contador_notificaciones',
+      );
+
+      _socket!.off(
+        'notificaciones_actualizadas',
+      );
+
+      // ========================================================
+      // CERRAR
+      // ========================================================
+
+      _socket!.disconnect();
+
+      _socket!.dispose();
+    } catch (
+      error
+    ) {
+      debugPrint(
+        'ERROR CERRANDO SOCKET: $error',
+      );
+    }
 
     _socket =
         null;

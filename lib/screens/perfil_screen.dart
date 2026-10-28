@@ -6,6 +6,8 @@ import '../services/auth_service.dart';
 import '../services/perfil_imagen_service.dart';
 import '../services/session_service.dart';
 import '../services/theme_service.dart';
+import '../services/firebase_messaging_service.dart';
+import '../services/notificacion_service.dart';
 
 import 'configuracion_screen.dart';
 import 'login_screen.dart';
@@ -298,7 +300,86 @@ class _PerfilScreenState
   // ============================================
 
   Future<void> cerrarSesion() async {
-    await SessionService.cerrarSesion();
+    try {
+      // =========================================
+      // OBTENER FID DE ESTE NAVEGADOR
+      // =========================================
+
+      final String? fid =
+          FirebaseMessagingService
+              .instance
+              .fid;
+
+      // =========================================
+      // DESACTIVAR FID EN RAILWAY
+      //
+      // IMPORTANTE:
+      // todavía tenemos el JWT en este punto.
+      // =========================================
+
+      if (fid != null && fid.isNotEmpty) {
+        final bool eliminado =
+            await NotificacionService
+                .eliminarFid(
+          fid: fid,
+        );
+
+        if (eliminado) {
+          debugPrint(
+            'FCM: FID desactivado correctamente',
+          );
+        } else {
+          debugPrint(
+            'FCM: no se pudo desactivar el FID',
+          );
+        }
+      } else {
+        debugPrint(
+          'FCM: no existe FID para desactivar',
+        );
+      }
+
+      // =========================================
+      // CERRAR LISTENER DE FIREBASE
+      // =========================================
+
+      await FirebaseMessagingService
+          .instance
+          .cerrar();
+
+      // =========================================
+      // BORRAR SESIÓN LOCAL
+      // =========================================
+
+      await SessionService.cerrarSesion();
+
+      debugPrint(
+        'SESIÓN CERRADA CORRECTAMENTE',
+      );
+    } catch (e) {
+      debugPrint(
+        'ERROR CERRANDO SESIÓN: $e',
+      );
+
+      // Aunque Firebase o Railway fallen,
+      // debemos cerrar la sesión local.
+
+      try {
+        await FirebaseMessagingService
+            .instance
+            .cerrar();
+      } catch (firebaseError) {
+        debugPrint(
+          'ERROR CERRANDO FCM: $firebaseError',
+        );
+      }
+
+      await SessionService.cerrarSesion();
+    }
+
+    // =========================================
+    // VOLVER AL LOGIN
+    // =========================================
 
     if (!mounted) {
       return;

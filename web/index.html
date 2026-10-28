@@ -34,5 +34,33 @@
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener(
+      'load',
+      function () {
+        navigator.serviceWorker.register(
+          'firebase-messaging-sw.js',
+          {
+            scope:
+              '/firebase-cloud-messaging-push-scope',
+          }
+        ).then(function (registration) {
+          console.log(
+            'Firebase Messaging SW registrado:',
+            registration
+          );
+        }).catch(function (error) {
+          console.error(
+            'Error registrando Firebase Messaging SW:',
+            error
+          );
+        });
+      }
+    );
+  }
+</script>
+
+<script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

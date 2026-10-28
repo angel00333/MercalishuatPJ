@@ -21,35 +21,28 @@ class ChatScreen extends StatefulWidget {
       _ChatScreenState();
 }
 
-class _ChatScreenState
-    extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> {
   static const Color naranja =
       Color(0xFFFF7E01);
 
   static const Color panelOscuro =
       Color(0xFF2A2045);
 
-  final TextEditingController
-      mensajeController =
+  final TextEditingController mensajeController =
       TextEditingController();
 
-  final ScrollController
-      scrollController =
+  final ScrollController scrollController =
       ScrollController();
 
-  List<Mensaje> mensajes =
-      [];
+  List<Mensaje> mensajes = [];
 
-  bool cargando =
-      true;
+  bool cargando = true;
 
-  bool enviando =
-      false;
+  bool enviando = false;
 
   String? error;
 
-  bool _socketPreparado =
-      false;
+  bool _socketPreparado = false;
 
   @override
   void initState() {
@@ -69,7 +62,7 @@ class _ChatScreenState
   }
 
   // ============================================================
-  // SOCKET
+  // PREPARAR SOCKET
   // ============================================================
 
   Future<void> _prepararSocket() async {
@@ -86,7 +79,7 @@ class _ChatScreenState
     }
 
     // ==========================================================
-    // ENTRAR A LA SALA
+    // ENTRAR A LA CONVERSACIÓN
     // ==========================================================
 
     ChatSocketService
@@ -96,7 +89,33 @@ class _ChatScreenState
     );
 
     // ==========================================================
-    // ESCUCHAR MENSAJES
+    // SI EL SOCKET SE RECONECTA
+    //
+    // vuelve a entrar a la conversación automáticamente.
+    // ==========================================================
+
+    ChatSocketService
+        .instance
+        .escucharConexion(
+      () {
+        if (!mounted) {
+          return;
+        }
+
+        debugPrint(
+          'CHAT SOCKET RECONECTADO',
+        );
+
+        ChatSocketService
+            .instance
+            .entrarConversacion(
+          widget.conversacionId,
+        );
+      },
+    );
+
+    // ==========================================================
+    // NUEVO MENSAJE
     // ==========================================================
 
     ChatSocketService
@@ -112,10 +131,11 @@ class _ChatScreenState
         final int? conversacionId =
             int.tryParse(
           data['conversacion_id']
-              ?.toString() ??
+                  ?.toString() ??
               '',
         );
 
+        // El mensaje pertenece a otro chat.
         if (
           conversacionId !=
           widget.conversacionId
@@ -124,12 +144,12 @@ class _ChatScreenState
         }
 
         try {
-          final mensaje =
+          final Mensaje mensaje =
               Mensaje.fromJson(
             data,
           );
 
-          final yaExiste =
+          final bool yaExiste =
               mensajes.any(
             (m) =>
                 m.id ==
@@ -145,6 +165,10 @@ class _ChatScreenState
               mensaje,
             );
           });
+
+          // ====================================================
+          // COMO EL CHAT ESTÁ ABIERTO, MARCAR COMO LEÍDO
+          // ====================================================
 
           await ChatService
               .marcarComoLeidos(
@@ -162,8 +186,118 @@ class _ChatScreenState
       },
     );
 
-    _socketPreparado =
-        true;
+    // ==========================================================
+    // MENSAJES LEÍDOS
+    //
+    // El backend emite:
+    //
+    // {
+    //   conversacion_id: 1,
+    //   lector_id: 5
+    // }
+    //
+    // Cuando llega este evento significa que el otro usuario
+    // abrió/leyó nuestros mensajes.
+    // ==========================================================
+
+    ChatSocketService
+        .instance
+        .escucharMensajesLeidos(
+      (
+        data,
+      ) {
+        if (!mounted) {
+          return;
+        }
+
+        final int? conversacionId =
+            int.tryParse(
+          data['conversacion_id']
+                  ?.toString() ??
+              '',
+        );
+
+        if (
+          conversacionId !=
+          widget.conversacionId
+        ) {
+          return;
+        }
+
+        debugPrint(
+          'MENSAJES LEÍDOS EN CONVERSACIÓN $conversacionId',
+        );
+
+        _marcarMensajesPropiosComoLeidos();
+      },
+    );
+
+    _socketPreparado = true;
+  }
+
+  // ============================================================
+  // ACTUALIZAR ✓ -> ✓✓
+  // ============================================================
+
+  void _marcarMensajesPropiosComoLeidos() {
+    if (!mounted) {
+      return;
+    }
+
+    bool huboCambios = false;
+
+    final List<Mensaje> actualizados =
+        mensajes.map(
+      (
+        mensaje,
+      ) {
+        if (
+          mensaje.esMio &&
+          !mensaje.leido
+        ) {
+          huboCambios = true;
+
+          return Mensaje(
+            id:
+                mensaje.id,
+
+            conversacionId:
+                mensaje
+                    .conversacionId,
+
+            remitenteId:
+                mensaje
+                    .remitenteId,
+
+            contenido:
+                mensaje
+                    .contenido,
+
+            leido:
+                true,
+
+            createdAt:
+                mensaje
+                    .createdAt,
+
+            esMio:
+                mensaje
+                    .esMio,
+          );
+        }
+
+        return mensaje;
+      },
+    ).toList();
+
+    if (!huboCambios) {
+      return;
+    }
+
+    setState(() {
+      mensajes =
+          actualizados;
+    });
   }
 
   // ============================================================
@@ -186,70 +320,121 @@ class _ChatScreenState
       });
     }
 
-    final resultado =
-        await ChatService
-            .obtenerMensajes(
-      conversacionId:
-          widget.conversacionId,
-    );
-
-    if (!mounted) {
-      return;
-    }
-
-    if (
-      resultado['success'] ==
-      true
-    ) {
-      final dynamic raw =
-          resultado[
-              'mensajes'];
-
-      final List<Mensaje> lista =
-          [];
-
-      if (raw is List) {
-        for (final item in raw) {
-          if (item is Mensaje) {
-            lista.add(
-              item,
-            );
-          }
-        }
-      }
-
-      setState(() {
-        mensajes =
-            lista;
-
-        cargando =
-            false;
-
-        error =
-            null;
-      });
-
-      await ChatService
-          .marcarComoLeidos(
+    try {
+      final resultado =
+          await ChatService
+              .obtenerMensajes(
         conversacionId:
             widget
                 .conversacionId,
       );
 
-      _bajar();
+      if (!mounted) {
+        return;
+      }
 
-      return;
+      if (
+        resultado['success'] ==
+        true
+      ) {
+        final dynamic raw =
+            resultado[
+                'mensajes'];
+
+        final List<Mensaje> lista =
+            [];
+
+        if (raw is List) {
+          for (
+            final item
+            in raw
+          ) {
+            if (
+              item is Mensaje
+            ) {
+              lista.add(
+                item,
+              );
+            } else if (
+              item is Map
+            ) {
+              try {
+                lista.add(
+                  Mensaje.fromJson(
+                    Map<String, dynamic>.from(
+                      item,
+                    ),
+                  ),
+                );
+              } catch (e) {
+                debugPrint(
+                  'ERROR PARSEANDO MENSAJE: $e',
+                );
+              }
+            }
+          }
+        }
+
+        setState(() {
+          mensajes =
+              lista;
+
+          cargando =
+              false;
+
+          error =
+              null;
+        });
+
+        // ======================================================
+        // MARCAR MENSAJES RECIBIDOS COMO LEÍDOS
+        // ======================================================
+
+        await ChatService
+            .marcarComoLeidos(
+          conversacionId:
+              widget
+                  .conversacionId,
+        );
+
+        _bajar();
+
+        return;
+      }
+
+      setState(() {
+        cargando =
+            false;
+
+        error =
+            resultado['message']
+                    ?.toString() ??
+                'No se pudieron cargar los mensajes';
+      });
+    } catch (
+      e,
+      stack
+    ) {
+      debugPrint(
+        'ERROR CARGANDO CHAT: $e',
+      );
+
+      debugPrint(
+        '$stack',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        cargando =
+            false;
+
+        error =
+            'No se pudieron cargar los mensajes';
+      });
     }
-
-    setState(() {
-      cargando =
-          false;
-
-      error =
-          resultado['message']
-                  ?.toString() ??
-              'No se pudieron cargar los mensajes';
-    });
   }
 
   // ============================================================
@@ -262,17 +447,21 @@ class _ChatScreenState
         .addPostFrameCallback(
       (_) {
         if (
+          !mounted ||
           !scrollController
               .hasClients
         ) {
           return;
         }
 
+        final double destino =
+            scrollController
+                .position
+                .maxScrollExtent;
+
         scrollController
             .animateTo(
-          scrollController
-              .position
-              .maxScrollExtent,
+          destino,
 
           duration:
               const Duration(
@@ -288,11 +477,11 @@ class _ChatScreenState
   }
 
   // ============================================================
-  // ENVIAR
+  // ENVIAR MENSAJE
   // ============================================================
 
   Future<void> _enviarMensaje() async {
-    final contenido =
+    final String contenido =
         mensajeController.text
             .trim();
 
@@ -308,117 +497,143 @@ class _ChatScreenState
           true;
     });
 
-    final resultado =
-        await ChatService
-            .enviarMensaje(
-      conversacionId:
-          widget.conversacionId,
+    try {
+      final resultado =
+          await ChatService
+              .enviarMensaje(
+        conversacionId:
+            widget
+                .conversacionId,
 
-      contenido:
-          contenido,
-    );
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      enviando =
-          false;
-    });
-
-    if (
-      resultado['success'] !=
-      true
-    ) {
-      ScaffoldMessenger.of(
-        context,
-      )
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content:
-                Text(
-              resultado['message']
-                      ?.toString() ??
-                  'No se pudo enviar el mensaje',
-            ),
-          ),
-        );
-
-      return;
-    }
-
-    mensajeController
-        .clear();
-
-    // ==========================================================
-    // AGREGAR MENSAJE DIRECTAMENTE
-    // ==========================================================
-
-    final dynamic rawMensaje =
-        resultado['mensaje'];
-
-    if (
-      rawMensaje is Mensaje
-    ) {
-      final yaExiste =
-          mensajes.any(
-        (m) =>
-            m.id ==
-            rawMensaje.id,
+        contenido:
+            contenido,
       );
 
-      if (!yaExiste) {
-        setState(() {
-          mensajes.add(
-            rawMensaje,
-          );
-        });
+      if (!mounted) {
+        return;
       }
-    } else if (
-      rawMensaje is Map
-    ) {
-      try {
-        final mensaje =
-            Mensaje.fromJson(
-          Map<String, dynamic>.from(
-            rawMensaje,
-          ),
-        );
 
-        final yaExiste =
+      setState(() {
+        enviando =
+            false;
+      });
+
+      if (
+        resultado['success'] !=
+        true
+      ) {
+        ScaffoldMessenger.of(
+          context,
+        )
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content:
+                  Text(
+                resultado['message']
+                        ?.toString() ??
+                    'No se pudo enviar el mensaje',
+              ),
+            ),
+          );
+
+        return;
+      }
+
+      mensajeController
+          .clear();
+
+      // ========================================================
+      // EL ChatService YA DEVUELVE Mensaje
+      // ========================================================
+
+      final dynamic rawMensaje =
+          resultado[
+              'mensaje'];
+
+      if (
+        rawMensaje is Mensaje
+      ) {
+        final bool yaExiste =
             mensajes.any(
           (m) =>
               m.id ==
-              mensaje.id,
+              rawMensaje.id,
         );
 
         if (!yaExiste) {
           setState(() {
             mensajes.add(
-              mensaje,
+              rawMensaje,
             );
           });
         }
-      } catch (e) {
-        debugPrint(
-          'ERROR AGREGANDO MENSAJE ENVIADO: $e',
-        );
+      } else if (
+        rawMensaje is Map
+      ) {
+        try {
+          final Mensaje mensaje =
+              Mensaje.fromJson(
+            Map<String, dynamic>.from(
+              rawMensaje,
+            ),
+          );
 
+          final bool yaExiste =
+              mensajes.any(
+            (m) =>
+                m.id ==
+                mensaje.id,
+          );
+
+          if (!yaExiste) {
+            setState(() {
+              mensajes.add(
+                mensaje,
+              );
+            });
+          }
+        } catch (e) {
+          debugPrint(
+            'ERROR AGREGANDO MENSAJE ENVIADO: $e',
+          );
+
+          await _cargarMensajes(
+            mostrarCarga:
+                false,
+          );
+        }
+      } else {
         await _cargarMensajes(
           mostrarCarga:
               false,
         );
       }
-    } else {
-      await _cargarMensajes(
-        mostrarCarga:
-            false,
-      );
-    }
 
-    _bajar();
+      _bajar();
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        enviando =
+            false;
+      });
+
+      ScaffoldMessenger.of(
+        context,
+      )
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content:
+                Text(
+              'No se pudo enviar el mensaje',
+            ),
+          ),
+        );
+    }
   }
 
   // ============================================================
@@ -436,13 +651,17 @@ class _ChatScreenState
   }
 
   // ============================================================
-  // AVATAR SUPERIOR
+  // AVATAR
   // ============================================================
 
   Widget _avatarUsuario() {
     final String? url =
         widget
             .imagenUsuarioUrl;
+
+    final bool tieneImagen =
+        url != null &&
+        url.trim().isNotEmpty;
 
     final String inicial =
         widget
@@ -466,18 +685,17 @@ class _ChatScreenState
           Colors.white,
 
       backgroundImage:
-          url != null &&
-                  url.isNotEmpty
+          tieneImagen
               ? NetworkImage(
                   url,
                 )
               : null,
 
       child:
-          url == null ||
-                  url.isEmpty
+          !tieneImagen
               ? Text(
                   inicial,
+
                   style:
                       const TextStyle(
                     fontWeight:
@@ -504,6 +722,14 @@ class _ChatScreenState
         .instance
         .dejarDeEscucharNuevoMensaje();
 
+    ChatSocketService
+        .instance
+        .dejarDeEscucharMensajesLeidos();
+
+    ChatSocketService
+        .instance
+        .dejarDeEscucharConexion();
+
     mensajeController
         .dispose();
 
@@ -521,7 +747,7 @@ class _ChatScreenState
   Widget build(
     BuildContext context,
   ) {
-    final oscuro =
+    final bool oscuro =
         Theme.of(context)
                 .brightness ==
             Brightness.dark;
@@ -536,7 +762,7 @@ class _ChatScreenState
             Row(
           children: [
             // ==================================================
-            // FOTO DEL USUARIO
+            // FOTO
             // ==================================================
 
             _avatarUsuario(),
@@ -555,6 +781,9 @@ class _ChatScreenState
                   Text(
                 widget
                     .nombreUsuario,
+
+                maxLines:
+                    1,
 
                 overflow:
                     TextOverflow
@@ -590,7 +819,7 @@ class _ChatScreenState
   }
 
   // ============================================================
-  // LISTA MENSAJES
+  // LISTA DE MENSAJES
   // ============================================================
 
   Widget _listaMensajes(
@@ -617,7 +846,7 @@ class _ChatScreenState
     if (error != null) {
       return Center(
         child:
-            Padding(
+            SingleChildScrollView(
           padding:
               const EdgeInsets.all(
             30,
@@ -630,8 +859,7 @@ class _ChatScreenState
 
             children: [
               const Icon(
-                Icons
-                    .error_outline,
+                Icons.error_outline,
                 color:
                     naranja,
                 size:
@@ -681,7 +909,7 @@ class _ChatScreenState
     }
 
     // ==========================================================
-    // VACÍO
+    // CHAT VACÍO
     // ==========================================================
 
     if (
@@ -717,6 +945,7 @@ class _ChatScreenState
 
               Text(
                 'Inicia la conversación',
+
                 style:
                     TextStyle(
                   fontSize:
@@ -749,6 +978,10 @@ class _ChatScreenState
       controller:
           scrollController,
 
+      keyboardDismissBehavior:
+          ScrollViewKeyboardDismissBehavior
+              .onDrag,
+
       padding:
           const EdgeInsets.fromLTRB(
         14,
@@ -765,7 +998,7 @@ class _ChatScreenState
             context,
             index,
           ) {
-        final mensaje =
+        final Mensaje mensaje =
             mensajes[
                 index];
 
@@ -865,8 +1098,10 @@ class _ChatScreenState
                       color:
                           esMio ||
                                   oscuro
-                              ? Colors.white
-                              : Colors.black87,
+                              ? Colors
+                                  .white
+                              : Colors
+                                  .black87,
 
                       fontSize:
                           15,
@@ -894,15 +1129,22 @@ class _ChatScreenState
                           TextStyle(
                         color:
                             esMio
-                                ? Colors.white70
+                                ? Colors
+                                    .white70
                                 : oscuro
-                                    ? Colors.white60
-                                    : Colors.black54,
+                                    ? Colors
+                                        .white60
+                                    : Colors
+                                        .black54,
 
                         fontSize:
                             10,
                       ),
                     ),
+
+                    // ==========================================
+                    // ✓ / ✓✓
+                    // ==========================================
 
                     if (esMio) ...[
                       const SizedBox(
@@ -922,7 +1164,12 @@ class _ChatScreenState
                             15,
 
                         color:
-                            Colors.white70,
+                            mensaje
+                                    .leido
+                                ? Colors
+                                    .white
+                                : Colors
+                                    .white70,
                       ),
                     ],
                   ],
@@ -936,7 +1183,7 @@ class _ChatScreenState
   }
 
   // ============================================================
-  // BARRA ENVIAR
+  // BARRA PARA ENVIAR
   // ============================================================
 
   Widget _barraEnviar(
@@ -1002,7 +1249,11 @@ class _ChatScreenState
                 onSubmitted:
                     (_) {
                   if (
-                    !enviando
+                    !enviando &&
+                    mensajeController
+                        .text
+                        .trim()
+                        .isNotEmpty
                   ) {
                     _enviarMensaje();
                   }
@@ -1034,6 +1285,34 @@ class _ChatScreenState
                         BorderSide.none,
                   ),
 
+                  enabledBorder:
+                      OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(
+                      24,
+                    ),
+
+                    borderSide:
+                        BorderSide.none,
+                  ),
+
+                  focusedBorder:
+                      OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(
+                      24,
+                    ),
+
+                    borderSide:
+                        const BorderSide(
+                      color:
+                          naranja,
+
+                      width:
+                          1,
+                    ),
+                  ),
+
                   contentPadding:
                       const EdgeInsets.symmetric(
                     horizontal:
@@ -1060,6 +1339,9 @@ class _ChatScreenState
 
               child:
                   IconButton(
+                tooltip:
+                    'Enviar',
+
                 onPressed:
                     enviando
                         ? null
@@ -1087,7 +1369,8 @@ class _ChatScreenState
                             ),
                           )
                         : const Icon(
-                            Icons.send_rounded,
+                            Icons
+                                .send_rounded,
                           ),
               ),
             ),
