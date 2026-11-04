@@ -251,9 +251,9 @@ class NotificacionService {
   // REGISTRAR FID
   // ============================================================
 
-static Future<bool>
-    registrarFid({
+static Future<bool> registrarFid({
   required String fid,
+  required String plataforma,
 }) async {
   try {
     final response =
@@ -264,24 +264,17 @@ static Future<bool>
       headers:
           await _headers(),
       body:
-          jsonEncode(
-        {
-          'fid':
-              fid,
-
-          'plataforma':
-              'web',
-        },
-      ),
+          jsonEncode({
+        'fid': fid,
+        'plataforma': plataforma,
+      }),
     );
 
     return response.statusCode >=
             200 &&
         response.statusCode <
             300;
-  } catch (
-    e
-  ) {
+  } catch (e) {
     return false;
   }
 }

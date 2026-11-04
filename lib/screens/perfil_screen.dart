@@ -18,6 +18,12 @@ import 'publicaciones/mis_publicaciones_screen.dart';
 import 'producto_actions/productos_screen.dart';
 import 'tienda_actions/mi_tienda_screen.dart';
 
+// ============================================================
+// ADMIN
+// ============================================================
+
+import 'admin/admin_dashboard_screen.dart';
+
 class PerfilScreen extends StatefulWidget {
   final ThemeService themeService;
 
@@ -461,6 +467,23 @@ class _PerfilScreenState
   }
 
   // ============================================
+  // PANEL ADMINISTRATIVO
+  // ============================================
+
+  Future<void> abrirPanelAdmin() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            AdminDashboardScreen(
+          themeService:
+              widget.themeService,
+        ),
+      ),
+    );
+  }
+
+  // ============================================
   // MENSAJE
   // ============================================
 
@@ -508,8 +531,15 @@ class _PerfilScreenState
       );
     }
 
-    final esEmprendedor =
+    // ============================================
+    // ROLES
+    // ============================================
+
+    final bool esEmprendedor =
         rol == 'emprendedor';
+
+    final bool esAdministrador =
+        rol == 'administrador';
 
     return Scaffold(
       appBar: AppBar(
@@ -625,6 +655,10 @@ class _PerfilScreenState
               height: 20,
             ),
 
+            // =================================
+            // NOMBRE
+            // =================================
+
             Text(
               nombreController.text,
 
@@ -643,10 +677,16 @@ class _PerfilScreenState
               height: 5,
             ),
 
+            // =================================
+            // ROL
+            // =================================
+
             Text(
-              esEmprendedor
-                  ? 'Emprendedor'
-                  : 'Usuario',
+              esAdministrador
+                  ? 'Administrador'
+                  : esEmprendedor
+                      ? 'Emprendedor'
+                      : 'Usuario',
 
               textAlign:
                   TextAlign.center,
@@ -772,13 +812,15 @@ class _PerfilScreenState
             ),
 
             // =================================
-            // PANEL
+            // TÍTULO PANEL
             // =================================
 
             Text(
-              esEmprendedor
-                  ? 'Panel del emprendedor'
-                  : 'Mi cuenta',
+              esAdministrador
+                  ? 'Panel administrativo'
+                  : esEmprendedor
+                      ? 'Panel del emprendedor'
+                      : 'Mi cuenta',
 
               style:
                   const TextStyle(
@@ -791,6 +833,27 @@ class _PerfilScreenState
             const SizedBox(
               height: 12,
             ),
+
+            // =================================
+            // OPCIONES ADMINISTRADOR
+            // =================================
+
+            if (esAdministrador) ...[
+              _opcion(
+                icon:
+                    Icons
+                        .admin_panel_settings_outlined,
+
+                titulo:
+                    'Panel administrativo',
+
+                descripcion:
+                    'Usuarios, estadísticas y administración de Mercalishuat',
+
+                onTap:
+                    abrirPanelAdmin,
+              ),
+            ],
 
             // =================================
             // OPCIONES EMPRENDEDOR
@@ -844,10 +907,11 @@ class _PerfilScreenState
             ],
 
             // =================================
-            // OPCIONES USUARIO
+            // OPCIONES USUARIO NORMAL
             // =================================
 
-            if (!esEmprendedor)
+            if (!esEmprendedor &&
+                !esAdministrador)
               _opcion(
                 icon:
                     Icons
