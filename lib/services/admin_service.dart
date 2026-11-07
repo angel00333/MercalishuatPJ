@@ -12,6 +12,56 @@ class AdminService {
   // ============================================================
   // HEADERS
   // ============================================================
+static Future<AdminUsuario>
+    cambiarEstadoUsuario({
+  required int usuarioId,
+  required bool activo,
+}) async {
+  final response =
+      await http.patch(
+    Uri.parse(
+      '${ApiConfig.baseUrl}/admin/usuarios/$usuarioId/estado',
+    ),
+    headers:
+        await _headers(),
+    body:
+        jsonEncode({
+      'activo': activo,
+    }),
+  );
+
+  final body =
+      _decode(
+    response,
+  );
+
+  _validarRespuesta(
+    response,
+    body,
+  );
+
+  if (
+      body is! Map<String, dynamic>) {
+    throw Exception(
+      'Respuesta inválida del servidor',
+    );
+  }
+
+  final data =
+      body['data'];
+
+  if (data is! Map) {
+    throw Exception(
+      'No se recibió el usuario actualizado',
+    );
+  }
+
+  return AdminUsuario.fromJson(
+    Map<String, dynamic>.from(
+      data,
+    ),
+  );
+}
 
   static Future<Map<String, String>>
       _headers() async {

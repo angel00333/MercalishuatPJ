@@ -4,6 +4,7 @@ class AdminUsuario {
   final String correo;
   final int rolId;
   final String rol;
+  final bool activo;
 
   const AdminUsuario({
     required this.id,
@@ -11,27 +12,24 @@ class AdminUsuario {
     required this.correo,
     required this.rolId,
     required this.rol,
+    required this.activo,
   });
 
   factory AdminUsuario.fromJson(
     Map<String, dynamic> json,
   ) {
     return AdminUsuario(
-      id: _toInt(
-        json['id'],
-      ),
+      id: _toInt(json['id']),
       nombre:
-          json['nombre']?.toString() ??
-          '',
+          json['nombre']?.toString() ?? '',
       correo:
-          json['correo']?.toString() ??
-          '',
-      rolId: _toInt(
-        json['rol_id'],
-      ),
+          json['correo']?.toString() ?? '',
+      rolId:
+          _toInt(json['rol_id']),
       rol:
-          json['rol']?.toString() ??
-          '',
+          json['rol']?.toString() ?? '',
+      activo:
+          json['activo'] == true,
     );
   }
 
@@ -48,10 +46,6 @@ class AdminUsuario {
         0;
   }
 }
-
-// ============================================================
-// RESPUESTA PAGINADA
-// ============================================================
 
 class AdminUsuariosRespuesta {
   final List<AdminUsuario> usuarios;

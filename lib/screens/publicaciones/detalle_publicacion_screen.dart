@@ -6,6 +6,7 @@ import '../../services/auth_service.dart';
 import '../../services/comentario_service.dart';
 import '../../services/publicacion_service.dart';
 import '../../services/session_service.dart';
+import '../../widgets/reporte_dialog.dart';
 
 class DetallePublicacionScreen extends StatefulWidget {
   final int publicacionId;
@@ -527,6 +528,30 @@ class _DetallePublicacionScreenState
   }
 
   // ============================================
+  // REPORTAR CONTENIDO
+  // ============================================
+
+  Future<void> reportarContenido({
+    required String tipo,
+    required int objetivoId,
+  }) async {
+    final enviado =
+        await mostrarDialogoReporte(
+      context: context,
+      tipo: tipo,
+      objetivoId: objetivoId,
+    );
+
+    if (!mounted) return;
+
+    if (enviado) {
+      mostrarMensaje(
+        'Reporte enviado correctamente',
+      );
+    }
+  }
+
+  // ============================================
   // MENSAJES
   // ============================================
 
@@ -731,33 +756,43 @@ class _DetallePublicacionScreenState
             // TRES PUNTOS
             // ===================================
 
-            if (esPropio)
-              PopupMenuButton<String>(
-                tooltip:
-                    'Opciones',
+            PopupMenuButton<String>(
+              tooltip:
+                  'Opciones',
 
-                padding:
-                    EdgeInsets.zero,
+              padding:
+                  EdgeInsets.zero,
 
-                icon:
-                    const Icon(
-                  Icons.more_vert,
-                  size:
-                      24,
-                ),
+              icon:
+                  const Icon(
+                Icons.more_vert,
+                size:
+                    24,
+              ),
 
-                onSelected:
-                    (valor) {
-                  if (valor ==
-                      'eliminar') {
-                    eliminarComentario(
-                      comentario,
-                    );
-                  }
-                },
+              onSelected:
+                  (valor) {
+                if (valor ==
+                    'eliminar') {
+                  eliminarComentario(
+                    comentario,
+                  );
+                }
 
-                itemBuilder:
-                    (context) => [
+                if (valor ==
+                    'reportar') {
+                  reportarContenido(
+                    tipo:
+                        'comentario',
+                    objetivoId:
+                        comentario.id,
+                  );
+                }
+              },
+
+              itemBuilder:
+                  (context) => [
+                if (esPropio)
                   PopupMenuItem<String>(
                     value:
                         'eliminar',
@@ -766,9 +801,7 @@ class _DetallePublicacionScreenState
                         Row(
                       children: [
                         const Icon(
-                          Icons
-                              .delete_outline,
-
+                          Icons.delete_outline,
                           color:
                               Colors.red,
                         ),
@@ -786,8 +819,36 @@ class _DetallePublicacionScreenState
                       ],
                     ),
                   ),
-                ],
-              ),
+
+                if (!esPropio)
+                  const PopupMenuItem<String>(
+                    value:
+                        'reportar',
+
+                    child:
+                        Row(
+                      children: [
+                        Icon(
+                          Icons.flag_outlined,
+                          color:
+                              Color(
+                            0xFFFF7E01,
+                          ),
+                        ),
+
+                        SizedBox(
+                          width:
+                              10,
+                        ),
+
+                        Text(
+                          'Reportar comentario',
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
           ],
         ),
 
@@ -1032,6 +1093,61 @@ class _DetallePublicacionScreenState
                       formatearFecha(
                         p.fechaCreacion,
                       ),
+                    ),
+
+                    trailing:
+                        PopupMenuButton<String>(
+                      tooltip:
+                          'Opciones',
+
+                      icon:
+                          const Icon(
+                        Icons.more_vert,
+                      ),
+
+                      onSelected:
+                          (valor) {
+                        if (valor ==
+                            'reportar') {
+                          reportarContenido(
+                            tipo:
+                                'publicacion',
+                            objetivoId:
+                                p.id,
+                          );
+                        }
+                      },
+
+                      itemBuilder:
+                          (context) =>
+                              const [
+                        PopupMenuItem<String>(
+                          value:
+                              'reportar',
+
+                          child:
+                              Row(
+                            children: [
+                              Icon(
+                                Icons.flag_outlined,
+                                color:
+                                    Color(
+                                  0xFFFF7E01,
+                                ),
+                              ),
+
+                              SizedBox(
+                                width:
+                                    10,
+                              ),
+
+                              Text(
+                                'Reportar publicación',
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
 

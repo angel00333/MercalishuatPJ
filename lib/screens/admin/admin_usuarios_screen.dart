@@ -4,43 +4,34 @@ import 'package:flutter/material.dart';
 
 import '../../models/admin_usuario.dart';
 import '../../services/admin_service.dart';
+import '/../widgets/admin/admin_top_bar.dart';
 
-class AdminUsuariosScreen
-    extends StatefulWidget {
+class AdminUsuariosScreen extends StatefulWidget {
   const AdminUsuariosScreen({
     super.key,
   });
 
   @override
-  State<AdminUsuariosScreen>
-      createState() =>
-          _AdminUsuariosScreenState();
+  State<AdminUsuariosScreen> createState() =>
+      _AdminUsuariosScreenState();
 }
 
 class _AdminUsuariosScreenState
     extends State<AdminUsuariosScreen> {
-  final TextEditingController
-      _buscarController =
+  final TextEditingController _buscarController =
       TextEditingController();
 
   Timer? _debounce;
 
-  List<AdminUsuario> _usuarios =
-      [];
+  List<AdminUsuario> _usuarios = [];
 
-  bool _cargando =
-      true;
+  bool _cargando = true;
 
   String? _error;
 
-  int _pagina =
-      1;
-
-  int _paginas =
-      1;
-
-  int _total =
-      0;
+  int _pagina = 1;
+  int _paginas = 1;
+  int _total = 0;
 
   int? _rolSeleccionado;
 
@@ -62,14 +53,13 @@ class _AdminUsuariosScreenState
   @override
   void dispose() {
     _debounce?.cancel();
-
     _buscarController.dispose();
 
     super.dispose();
   }
 
   // ============================================================
-  // CARGAR
+  // CARGAR USUARIOS
   // ============================================================
 
   Future<void> _cargarUsuarios({
@@ -80,28 +70,18 @@ class _AdminUsuariosScreenState
 
     if (mounted) {
       setState(() {
-        _cargando =
-            true;
-
-        _error =
-            null;
+        _cargando = true;
+        _error = null;
       });
     }
 
     try {
       final resultado =
           await AdminService.obtenerUsuarios(
-        pagina:
-            paginaSolicitada,
-
-        limite:
-            20,
-
-        buscar:
-            _buscarController.text,
-
-        rolId:
-            _rolSeleccionado,
+        pagina: paginaSolicitada,
+        limite: 20,
+        buscar: _buscarController.text,
+        rolId: _rolSeleccionado,
       );
 
       if (!mounted) {
@@ -109,20 +89,11 @@ class _AdminUsuariosScreenState
       }
 
       setState(() {
-        _usuarios =
-            resultado.usuarios;
-
-        _pagina =
-            resultado.pagina;
-
-        _paginas =
-            resultado.paginas;
-
-        _total =
-            resultado.total;
-
-        _cargando =
-            false;
+        _usuarios = resultado.usuarios;
+        _pagina = resultado.pagina;
+        _paginas = resultado.paginas;
+        _total = resultado.total;
+        _cargando = false;
       });
     } catch (e) {
       if (!mounted) {
@@ -130,16 +101,14 @@ class _AdminUsuariosScreenState
       }
 
       setState(() {
-        _error =
-            e
-                .toString()
-                .replaceFirst(
-                  'Exception: ',
-                  '',
-                );
+        _error = e
+            .toString()
+            .replaceFirst(
+              'Exception: ',
+              '',
+            );
 
-        _cargando =
-            false;
+        _cargando = false;
       });
     }
   }
@@ -153,22 +122,141 @@ class _AdminUsuariosScreenState
   ) {
     _debounce?.cancel();
 
-    _debounce =
-        Timer(
+    setState(() {});
+
+    _debounce = Timer(
       const Duration(
-        milliseconds:
-            450,
+        milliseconds: 450,
       ),
       () {
-        _pagina =
-            1;
+        _pagina = 1;
 
         _cargarUsuarios(
-          pagina:
-              1,
+          pagina: 1,
         );
       },
     );
+  }
+
+  // ============================================================
+  // CAMBIAR ESTADO
+  // ============================================================
+
+  Future<void> _cambiarEstado(
+    AdminUsuario usuario,
+  ) async {
+    final nuevoEstado =
+        !usuario.activo;
+
+    final confirmado =
+        await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            nuevoEstado
+                ? 'Reactivar usuario'
+                : 'Suspender usuario',
+          ),
+          content: Text(
+            nuevoEstado
+                ? '¿Deseas reactivar la cuenta de ${usuario.nombre}?'
+                : '¿Deseas suspender la cuenta de ${usuario.nombre}? '
+                    'El usuario no podrá iniciar sesión mientras esté suspendido.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                  false,
+                );
+              },
+              child: const Text(
+                'Cancelar',
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                  true,
+                );
+              },
+              style:
+                  FilledButton.styleFrom(
+                backgroundColor:
+                    nuevoEstado
+                        ? Colors.green
+                        : Colors.red,
+                foregroundColor:
+                    Colors.white,
+              ),
+              icon: Icon(
+                nuevoEstado
+                    ? Icons
+                        .check_circle_outline
+                    : Icons.block_outlined,
+              ),
+              label: Text(
+                nuevoEstado
+                    ? 'Reactivar'
+                    : 'Suspender',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmado != true) {
+      return;
+    }
+
+    try {
+      await AdminService
+          .cambiarEstadoUsuario(
+        usuarioId: usuario.id,
+        activo: nuevoEstado,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            nuevoEstado
+                ? 'Usuario reactivado correctamente'
+                : 'Usuario suspendido correctamente',
+          ),
+        ),
+      );
+
+      await _cargarUsuarios();
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            e
+                .toString()
+                .replaceFirst(
+                  'Exception: ',
+                  '',
+                ),
+          ),
+        ),
+      );
+    }
   }
 
   // ============================================================
@@ -188,28 +276,18 @@ class _AdminUsuariosScreenState
         return;
       }
 
-      showModalBottomSheet(
-        context:
-            context,
-
-        showDragHandle:
-            true,
-
-        isScrollControlled:
-            true,
-
-        builder:
-            (
-          context,
-        ) {
+      await showModalBottomSheet(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (context) {
           final oscuro =
-              Theme.of(context).brightness ==
+              Theme.of(context)
+                      .brightness ==
                   Brightness.dark;
 
           return Container(
-            width:
-                double.infinity,
-
+            width: double.infinity,
             padding:
                 const EdgeInsets.fromLTRB(
               24,
@@ -217,168 +295,147 @@ class _AdminUsuariosScreenState
               24,
               32,
             ),
-
-            decoration:
-                BoxDecoration(
-              color:
-                  oscuro
-                      ? const Color(
-                          0xFF211A32,
-                        )
-                      : Colors.white,
-
+            decoration: BoxDecoration(
+              color: oscuro
+                  ? const Color(
+                      0xFF211A32,
+                    )
+                  : Colors.white,
               borderRadius:
                   const BorderRadius.vertical(
-                top:
-                    Radius.circular(
+                top: Radius.circular(
                   24,
                 ),
               ),
             ),
-
-            child:
-                Column(
+            child: Column(
               mainAxisSize:
                   MainAxisSize.min,
-
               crossAxisAlignment:
                   CrossAxisAlignment.start,
-
               children: [
                 Row(
                   children: [
                     CircleAvatar(
-                      radius:
-                          28,
-
+                      radius: 28,
                       backgroundColor:
                           const Color(
                             0xFFFF7E01,
                           ).withValues(
-                        alpha:
-                            0.15,
+                        alpha: 0.15,
                       ),
-
-                      child:
-                          Text(
+                      child: Text(
                         _iniciales(
                           completo.nombre,
                         ),
                         style:
                             const TextStyle(
-                          color:
-                              Color(
+                          color: Color(
                             0xFFFF7E01,
                           ),
-
                           fontWeight:
                               FontWeight.w800,
                         ),
                       ),
                     ),
-
                     const SizedBox(
-                      width:
-                          16,
+                      width: 16,
                     ),
-
                     Expanded(
-                      child:
-                          Column(
+                      child: Column(
                         crossAxisAlignment:
-                            CrossAxisAlignment.start,
-
+                            CrossAxisAlignment
+                                .start,
                         children: [
                           Text(
                             completo.nombre,
                             style:
                                 const TextStyle(
-                              fontSize:
-                                  19,
+                              fontSize: 19,
                               fontWeight:
-                                  FontWeight.w800,
+                                  FontWeight
+                                      .w800,
                             ),
                           ),
-
                           const SizedBox(
-                            height:
-                                4,
+                            height: 4,
                           ),
-
                           Text(
                             completo.correo,
                             style:
                                 TextStyle(
-                              color:
-                                  Colors.grey.shade500,
+                              color: Colors
+                                  .grey
+                                  .shade500,
                             ),
                           ),
                         ],
                       ),
                     ),
+                    _badgeEstado(
+                      completo,
+                    ),
                   ],
                 ),
 
                 const SizedBox(
-                  height:
-                      26,
+                  height: 26,
                 ),
 
                 _filaDetalle(
-                  titulo:
-                      'ID',
-
+                  titulo: 'ID',
                   valor:
                       '${completo.id}',
                 ),
 
                 _filaDetalle(
-                  titulo:
-                      'Rol',
-
-                  valor:
-                      _nombreRol(
+                  titulo: 'Rol',
+                  valor: _nombreRol(
                     completo,
                   ),
                 ),
 
                 _filaDetalle(
-                  titulo:
-                      'Rol ID',
-
+                  titulo: 'Rol ID',
                   valor:
                       '${completo.rolId}',
                 ),
 
+                _filaDetalle(
+                  titulo: 'Estado',
+                  valor:
+                      completo.activo
+                          ? 'Activo'
+                          : 'Suspendido',
+                ),
+
                 const SizedBox(
-                  height:
-                      20,
+                  height: 20,
                 ),
 
                 SizedBox(
                   width:
                       double.infinity,
-
                   child:
-                      FilledButton(
+                      FilledButton.icon(
                     onPressed: () {
                       Navigator.pop(
                         context,
                       );
                     },
-
                     style:
                         FilledButton.styleFrom(
                       backgroundColor:
                           const Color(
                         0xFFFF7E01,
                       ),
-
                       foregroundColor:
                           Colors.white,
                     ),
-
-                    child:
+                    icon: const Icon(
+                      Icons.close_rounded,
+                    ),
+                    label:
                         const Text(
                       'Cerrar',
                     ),
@@ -398,8 +455,7 @@ class _AdminUsuariosScreenState
         context,
       ).showSnackBar(
         SnackBar(
-          content:
-              Text(
+          content: Text(
             e
                 .toString()
                 .replaceFirst(
@@ -425,69 +481,38 @@ class _AdminUsuariosScreenState
             Brightness.dark;
 
     return Scaffold(
-      backgroundColor:
-          oscuro
-              ? const Color(
-                  0xFF171320,
-                )
-              : const Color(
-                  0xFFF7F7F8,
-                ),
-
-      appBar:
-          AppBar(
-        backgroundColor:
-            oscuro
-                ? const Color(
-                    0xFF171320,
-                  )
-                : Colors.white,
-
-        surfaceTintColor:
-            Colors.transparent,
-
-        title:
-            const Text(
-          'Gestionar usuarios',
-          style:
-              TextStyle(
-            fontWeight:
-                FontWeight.w700,
-          ),
-        ),
-
-        actions: [
-          IconButton(
-            tooltip:
-                'Actualizar',
-
-            onPressed: () {
-              _cargarUsuarios();
-            },
-
-            icon:
-                const Icon(
-              Icons.refresh_rounded,
+      backgroundColor: oscuro
+          ? const Color(
+              0xFF171320,
+            )
+          : const Color(
+              0xFFF7F7F8,
             ),
-          ),
-        ],
+      appBar: buildAdminTopBar(
+  context: context,
+  title: 'Gestionar usuarios',
+  actions: [
+    IconButton(
+      tooltip: 'Actualizar',
+      onPressed: () {
+        _cargarUsuarios();
+      },
+      icon: const Icon(
+        Icons.refresh_rounded,
       ),
-
-      body:
-          RefreshIndicator(
+    ),
+  ],
+),
+      body: RefreshIndicator(
         onRefresh:
             _cargarUsuarios,
-
-        child:
-            Column(
+        child: Column(
           children: [
             _filtros(
               oscuro,
             ),
-
             Expanded(
-              child:
-                  _contenido(
+              child: _contenido(
                 oscuro,
               ),
             ),
@@ -512,34 +537,26 @@ class _AdminUsuariosScreenState
         16,
         14,
       ),
-
-      color:
-          oscuro
-              ? const Color(
-                  0xFF171320,
-                )
-              : Colors.white,
-
-      child:
-          Column(
+      color: oscuro
+          ? const Color(
+              0xFF171320,
+            )
+          : Colors.white,
+      child: Column(
         children: [
           TextField(
             controller:
                 _buscarController,
-
             onChanged:
                 _onBuscar,
-
             decoration:
                 InputDecoration(
               hintText:
                   'Buscar por nombre o correo',
-
               prefixIcon:
                   const Icon(
                 Icons.search_rounded,
               ),
-
               suffixIcon:
                   _buscarController
                           .text
@@ -549,41 +566,38 @@ class _AdminUsuariosScreenState
                             _buscarController
                                 .clear();
 
-                            _pagina =
-                                1;
+                            setState(
+                              () {},
+                            );
+
+                            _pagina = 1;
 
                             _cargarUsuarios(
-                              pagina:
-                                  1,
+                              pagina: 1,
                             );
                           },
-
                           icon:
                               const Icon(
-                            Icons.close_rounded,
+                            Icons
+                                .close_rounded,
                           ),
                         )
                       : null,
-
-              filled:
-                  true,
-
-              fillColor:
-                  oscuro
-                      ? const Color(
-                          0xFF2A2045,
-                        )
-                      : const Color(
-                          0xFFF2F2F4,
-                        ),
-
+              filled: true,
+              fillColor: oscuro
+                  ? const Color(
+                      0xFF2A2045,
+                    )
+                  : const Color(
+                      0xFFF2F2F4,
+                    ),
               border:
                   OutlineInputBorder(
                 borderRadius:
-                    BorderRadius.circular(
+                    BorderRadius
+                        .circular(
                   15,
                 ),
-
                 borderSide:
                     BorderSide.none,
               ),
@@ -591,86 +605,70 @@ class _AdminUsuariosScreenState
           ),
 
           const SizedBox(
-            height:
-                12,
+            height: 12,
           ),
 
           Row(
             children: [
               Expanded(
                 child:
-                    DropdownButtonFormField<int?>(
+                    DropdownButtonFormField<
+                        int?>(
                   initialValue:
                       _rolSeleccionado,
-
                   decoration:
                       InputDecoration(
                     labelText:
                         'Rol',
-
-                    filled:
-                        true,
-
-                    fillColor:
-                        oscuro
-                            ? const Color(
-                                0xFF2A2045,
-                              )
-                            : const Color(
-                                0xFFF2F2F4,
-                              ),
-
+                    filled: true,
+                    fillColor: oscuro
+                        ? const Color(
+                            0xFF2A2045,
+                          )
+                        : const Color(
+                            0xFFF2F2F4,
+                          ),
                     border:
                         OutlineInputBorder(
                       borderRadius:
-                          BorderRadius.circular(
+                          BorderRadius
+                              .circular(
                         15,
                       ),
-
                       borderSide:
                           BorderSide.none,
                     ),
                   ),
-
-                  items:
-                      const [
-                    DropdownMenuItem<int?>(
-                      value:
-                          null,
-                      child:
-                          Text(
+                  items: const [
+                    DropdownMenuItem<
+                        int?>(
+                      value: null,
+                      child: Text(
                         'Todos',
                       ),
                     ),
-
-                    DropdownMenuItem<int?>(
-                      value:
-                          1,
-                      child:
-                          Text(
+                    DropdownMenuItem<
+                        int?>(
+                      value: 1,
+                      child: Text(
                         'Usuarios',
                       ),
                     ),
-
-                    DropdownMenuItem<int?>(
-                      value:
-                          2,
-                      child:
-                          Text(
+                    DropdownMenuItem<
+                        int?>(
+                      value: 2,
+                      child: Text(
                         'Emprendedores',
                       ),
                     ),
-
-                    DropdownMenuItem<int?>(
-                      value:
-                          3,
-                      child:
-                          Text(
+                    DropdownMenuItem<
+                        int?>(
+                      value: 3,
+                      child: Text(
                         'Administradores',
                       ),
                     ),
                   ],
-
                   onChanged: (
                     value,
                   ) {
@@ -678,56 +676,46 @@ class _AdminUsuariosScreenState
                       _rolSeleccionado =
                           value;
 
-                      _pagina =
-                          1;
+                      _pagina = 1;
                     });
 
                     _cargarUsuarios(
-                      pagina:
-                          1,
+                      pagina: 1,
                     );
                   },
                 ),
               ),
 
               const SizedBox(
-                width:
-                    12,
+                width: 12,
               ),
 
               Container(
                 padding:
-                    const EdgeInsets.symmetric(
-                  horizontal:
-                      14,
-
-                  vertical:
-                      16,
+                    const EdgeInsets
+                        .symmetric(
+                  horizontal: 14,
+                  vertical: 16,
                 ),
-
                 decoration:
                     BoxDecoration(
                   color:
                       const Color(
                         0xFFFF7E01,
                       ).withValues(
-                    alpha:
-                        0.12,
+                    alpha: 0.12,
                   ),
-
                   borderRadius:
-                      BorderRadius.circular(
+                      BorderRadius
+                          .circular(
                     15,
                   ),
                 ),
-
-                child:
-                    Text(
+                child: Text(
                   '$_total',
                   style:
                       const TextStyle(
-                    color:
-                        Color(
+                    color: Color(
                       0xFFFF7E01,
                     ),
                     fontWeight:
@@ -753,8 +741,7 @@ class _AdminUsuariosScreenState
       return const Center(
         child:
             CircularProgressIndicator(
-          color:
-              Color(
+          color: Color(
             0xFFFF7E01,
           ),
         ),
@@ -765,53 +752,46 @@ class _AdminUsuariosScreenState
       return ListView(
         physics:
             const AlwaysScrollableScrollPhysics(),
-
         padding:
             const EdgeInsets.all(
           24,
         ),
-
         children: [
           const SizedBox(
-            height:
-                100,
+            height: 100,
           ),
-
           const Icon(
-            Icons.error_outline_rounded,
-            size:
-                60,
+            Icons
+                .error_outline_rounded,
+            size: 60,
           ),
-
           const SizedBox(
-            height:
-                16,
+            height: 16,
           ),
-
           Text(
             _error!,
             textAlign:
                 TextAlign.center,
           ),
-
           const SizedBox(
-            height:
-                18,
+            height: 18,
           ),
-
-          FilledButton(
+          FilledButton.icon(
             onPressed:
                 _cargarUsuarios,
-
             style:
                 FilledButton.styleFrom(
               backgroundColor:
                   const Color(
                 0xFFFF7E01,
               ),
+              foregroundColor:
+                  Colors.white,
             ),
-
-            child:
+            icon: const Icon(
+              Icons.refresh_rounded,
+            ),
+            label:
                 const Text(
               'Reintentar',
             ),
@@ -824,27 +804,20 @@ class _AdminUsuariosScreenState
       return ListView(
         physics:
             const AlwaysScrollableScrollPhysics(),
-
         children: const [
           SizedBox(
-            height:
-                150,
+            height: 150,
           ),
-
           Icon(
-            Icons.person_search_outlined,
-            size:
-                64,
+            Icons
+                .person_search_outlined,
+            size: 64,
           ),
-
           SizedBox(
-            height:
-                14,
+            height: 14,
           ),
-
           Center(
-            child:
-                Text(
+            child: Text(
               'No se encontraron usuarios',
             ),
           ),
@@ -855,7 +828,6 @@ class _AdminUsuariosScreenState
     return ListView(
       physics:
           const AlwaysScrollableScrollPhysics(),
-
       padding:
           const EdgeInsets.fromLTRB(
         16,
@@ -863,7 +835,6 @@ class _AdminUsuariosScreenState
         16,
         26,
       ),
-
       children: [
         ..._usuarios.map(
           (
@@ -874,7 +845,6 @@ class _AdminUsuariosScreenState
             oscuro,
           ),
         ),
-
         if (_paginas > 1)
           _paginacion(),
       ],
@@ -892,34 +862,32 @@ class _AdminUsuariosScreenState
     return Container(
       margin:
           const EdgeInsets.only(
-        bottom:
-            10,
+        bottom: 10,
       ),
-
       decoration:
           BoxDecoration(
-        color:
-            oscuro
-                ? const Color(
-                    0xFF2A2045,
-                  )
-                : Colors.white,
-
+        color: oscuro
+            ? const Color(
+                0xFF2A2045,
+              )
+            : Colors.white,
         borderRadius:
             BorderRadius.circular(
           16,
         ),
+        border: Border.all(
+          color: usuario.activo
+              ? Colors.transparent
+              : Colors.red.withValues(
+                  alpha: 0.25,
+                ),
+        ),
       ),
-
-      child:
-          ListTile(
+      child: ListTile(
         contentPadding:
             const EdgeInsets.symmetric(
-          horizontal:
-              16,
-
-          vertical:
-              6,
+          horizontal: 16,
+          vertical: 7,
         ),
 
         onTap: () {
@@ -928,78 +896,147 @@ class _AdminUsuariosScreenState
           );
         },
 
-        leading:
-            CircleAvatar(
+        leading: CircleAvatar(
           backgroundColor:
-              const Color(
-                0xFFFF7E01,
-              ).withValues(
-            alpha:
-                0.14,
-          ),
-
-          child:
-              Text(
+              usuario.activo
+                  ? const Color(
+                      0xFFFF7E01,
+                    ).withValues(
+                      alpha: 0.14,
+                    )
+                  : Colors.red
+                      .withValues(
+                      alpha: 0.12,
+                    ),
+          child: Text(
             _iniciales(
               usuario.nombre,
             ),
-
-            style:
-                const TextStyle(
-              color:
-                  Color(
-                0xFFFF7E01,
-              ),
-
+            style: TextStyle(
+              color: usuario.activo
+                  ? const Color(
+                      0xFFFF7E01,
+                    )
+                  : Colors.red,
               fontWeight:
                   FontWeight.w800,
             ),
           ),
         ),
 
-        title:
-            Text(
+        title: Text(
           usuario.nombre,
-          style:
-              const TextStyle(
+          style: TextStyle(
             fontWeight:
                 FontWeight.w700,
+            color: usuario.activo
+                ? null
+                : Colors.grey,
           ),
         ),
 
-        subtitle:
-            Column(
+        subtitle: Column(
           crossAxisAlignment:
               CrossAxisAlignment.start,
-
           children: [
             const SizedBox(
-              height:
-                  3,
+              height: 3,
             ),
 
             Text(
               usuario.correo,
-              maxLines:
-                  1,
+              maxLines: 1,
               overflow:
                   TextOverflow.ellipsis,
             ),
 
             const SizedBox(
-              height:
-                  5,
+              height: 7,
             ),
 
-            _badgeRol(
-              usuario,
+            Wrap(
+              spacing: 7,
+              runSpacing: 5,
+              children: [
+                _badgeRol(
+                  usuario,
+                ),
+                _badgeEstado(
+                  usuario,
+                ),
+              ],
             ),
           ],
         ),
 
         trailing:
-            const Icon(
-          Icons.chevron_right_rounded,
+            PopupMenuButton<String>(
+          tooltip:
+              'Opciones',
+          onSelected: (
+            value,
+          ) {
+            if (value ==
+                'estado') {
+              _cambiarEstado(
+                usuario,
+              );
+            }
+
+            if (value ==
+                'detalle') {
+              _mostrarDetalle(
+                usuario,
+              );
+            }
+          },
+          itemBuilder: (_) => [
+            const PopupMenuItem<
+                String>(
+              value: 'detalle',
+              child: Row(
+                children: [
+                  Icon(
+                    Icons
+                        .visibility_outlined,
+                  ),
+                  SizedBox(
+                    width: 10,
+                  ),
+                  Text(
+                    'Ver detalle',
+                  ),
+                ],
+              ),
+            ),
+
+            PopupMenuItem<String>(
+              value: 'estado',
+              child: Row(
+                children: [
+                  Icon(
+                    usuario.activo
+                        ? Icons
+                            .block_outlined
+                        : Icons
+                            .check_circle_outline,
+                    color:
+                        usuario.activo
+                            ? Colors.red
+                            : Colors.green,
+                  ),
+                  const SizedBox(
+                    width: 10,
+                  ),
+                  Text(
+                    usuario.activo
+                        ? 'Suspender'
+                        : 'Reactivar',
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1017,55 +1054,96 @@ class _AdminUsuariosScreenState
       usuario,
     );
 
-    return Align(
-      alignment:
-          Alignment.centerLeft,
-
-      child:
-          Container(
-        padding:
-            const EdgeInsets.symmetric(
-          horizontal:
-              9,
-
-          vertical:
-              4,
-        ),
-
-        decoration:
-            BoxDecoration(
-          color:
-              const Color(
-                0xFFFF7E01,
-              ).withValues(
-            alpha:
-                0.12,
-          ),
-
-          borderRadius:
-              BorderRadius.circular(
-            20,
-          ),
-        ),
-
-        child:
-            Text(
-          nombre,
-
-          style:
-              const TextStyle(
-            color:
-                Color(
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(
+        horizontal: 9,
+        vertical: 4,
+      ),
+      decoration:
+          BoxDecoration(
+        color:
+            const Color(
               0xFFFF7E01,
-            ),
-
-            fontSize:
-                11,
-
-            fontWeight:
-                FontWeight.w700,
-          ),
+            ).withValues(
+          alpha: 0.12,
         ),
+        borderRadius:
+            BorderRadius.circular(
+          20,
+        ),
+      ),
+      child: Text(
+        nombre,
+        style:
+            const TextStyle(
+          color: Color(
+            0xFFFF7E01,
+          ),
+          fontSize: 11,
+          fontWeight:
+              FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // BADGE ESTADO
+  // ============================================================
+
+  Widget _badgeEstado(
+    AdminUsuario usuario,
+  ) {
+    final Color color =
+        usuario.activo
+            ? Colors.green
+            : Colors.red;
+
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(
+        horizontal: 9,
+        vertical: 4,
+      ),
+      decoration:
+          BoxDecoration(
+        color: color.withValues(
+          alpha: 0.12,
+        ),
+        borderRadius:
+            BorderRadius.circular(
+          20,
+        ),
+      ),
+      child: Row(
+        mainAxisSize:
+            MainAxisSize.min,
+        children: [
+          Icon(
+            usuario.activo
+                ? Icons
+                    .check_circle_outline
+                : Icons
+                    .block_outlined,
+            size: 13,
+            color: color,
+          ),
+          const SizedBox(
+            width: 4,
+          ),
+          Text(
+            usuario.activo
+                ? 'Activo'
+                : 'Suspendido',
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight:
+                  FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1078,17 +1156,15 @@ class _AdminUsuariosScreenState
     return Padding(
       padding:
           const EdgeInsets.only(
-        top:
-            15,
+        top: 15,
       ),
-
-      child:
-          Row(
+      child: Row(
         mainAxisAlignment:
             MainAxisAlignment.center,
-
         children: [
           IconButton(
+            tooltip:
+                'Página anterior',
             onPressed:
                 _pagina > 1
                     ? () {
@@ -1099,22 +1175,18 @@ class _AdminUsuariosScreenState
                         );
                       }
                     : null,
-
-            icon:
-                const Icon(
-              Icons.chevron_left_rounded,
+            icon: const Icon(
+              Icons
+                  .chevron_left_rounded,
             ),
           ),
-
           Padding(
             padding:
-                const EdgeInsets.symmetric(
-              horizontal:
-                  16,
+                const EdgeInsets
+                    .symmetric(
+              horizontal: 16,
             ),
-
-            child:
-                Text(
+            child: Text(
               'Página $_pagina de $_paginas',
               style:
                   const TextStyle(
@@ -1123,11 +1195,11 @@ class _AdminUsuariosScreenState
               ),
             ),
           ),
-
           IconButton(
+            tooltip:
+                'Página siguiente',
             onPressed:
-                _pagina <
-                        _paginas
+                _pagina < _paginas
                     ? () {
                         _cargarUsuarios(
                           pagina:
@@ -1136,10 +1208,9 @@ class _AdminUsuariosScreenState
                         );
                       }
                     : null,
-
-            icon:
-                const Icon(
-              Icons.chevron_right_rounded,
+            icon: const Icon(
+              Icons
+                  .chevron_right_rounded,
             ),
           ),
         ],
@@ -1154,7 +1225,9 @@ class _AdminUsuariosScreenState
   String _nombreRol(
     AdminUsuario usuario,
   ) {
-    if (usuario.rol.trim().isNotEmpty) {
+    if (usuario.rol
+        .trim()
+        .isNotEmpty) {
       final texto =
           usuario.rol.trim();
 
@@ -1188,9 +1261,7 @@ class _AdminUsuariosScreenState
               ),
             )
             .where(
-              (
-                item,
-              ) =>
+              (item) =>
                   item.isNotEmpty,
             )
             .toList();
@@ -1217,31 +1288,22 @@ class _AdminUsuariosScreenState
     return Padding(
       padding:
           const EdgeInsets.symmetric(
-        vertical:
-            8,
+        vertical: 8,
       ),
-
-      child:
-          Row(
+      child: Row(
         children: [
           SizedBox(
-            width:
-                85,
-
-            child:
-                Text(
+            width: 85,
+            child: Text(
               titulo,
-              style:
-                  TextStyle(
+              style: TextStyle(
                 color:
                     Colors.grey.shade500,
               ),
             ),
           ),
-
           Expanded(
-            child:
-                Text(
+            child: Text(
               valor,
               style:
                   const TextStyle(

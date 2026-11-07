@@ -3,32 +3,35 @@ import 'package:flutter/material.dart';
 import '../../models/admin_dashboard.dart';
 import '../../services/admin_service.dart';
 import '../../services/session_service.dart';
-import '../login_screen.dart';
 import '../../services/theme_service.dart';
+import '../login_screen.dart';
 import 'admin_usuarios_screen.dart';
+import 'admin_reportes_screen.dart';
 
-class AdminDashboardScreen
-    extends StatefulWidget {
+class AdminDashboardScreen extends StatefulWidget {
   final ThemeService themeService;
+
   const AdminDashboardScreen({
     super.key,
     required this.themeService,
   });
 
   @override
-  State<AdminDashboardScreen>
-      createState() =>
-          _AdminDashboardScreenState();
+  State<AdminDashboardScreen> createState() =>
+      _AdminDashboardScreenState();
 }
 
 class _AdminDashboardScreenState
     extends State<AdminDashboardScreen> {
   AdminDashboard? _dashboard;
 
-  bool _cargando =
-      true;
+  bool _cargando = true;
 
   String? _error;
+
+  // ============================================================
+  // INIT
+  // ============================================================
 
   @override
   void initState() {
@@ -41,15 +44,11 @@ class _AdminDashboardScreenState
   // CARGAR DASHBOARD
   // ============================================================
 
-  Future<void>
-      _cargarDashboard() async {
+  Future<void> _cargarDashboard() async {
     if (mounted) {
       setState(() {
-        _cargando =
-            true;
-
-        _error =
-            null;
+        _cargando = true;
+        _error = null;
       });
     }
 
@@ -62,11 +61,8 @@ class _AdminDashboardScreenState
       }
 
       setState(() {
-        _dashboard =
-            dashboard;
-
-        _cargando =
-            false;
+        _dashboard = dashboard;
+        _cargando = false;
       });
     } catch (e) {
       if (!mounted) {
@@ -74,16 +70,14 @@ class _AdminDashboardScreenState
       }
 
       setState(() {
-        _error =
-            e
-                .toString()
-                .replaceFirst(
-                  'Exception: ',
-                  '',
-                );
+        _error = e
+            .toString()
+            .replaceFirst(
+              'Exception: ',
+              '',
+            );
 
-        _cargando =
-            false;
+        _cargando = false;
       });
     }
   }
@@ -92,23 +86,20 @@ class _AdminDashboardScreenState
   // CERRAR SESIÓN
   // ============================================================
 
-  Future<void>
-      _cerrarSesion() async {
+  Future<void> _cerrarSesion() async {
     await SessionService.cerrarSesion();
 
     if (!mounted) {
       return;
     }
 
-    Navigator.of(context)
-        .pushAndRemoveUntil(
+    Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (_) =>
-            LoginScreen(
-            themeService: widget.themeService,),
+        builder: (_) => LoginScreen(
+          themeService: widget.themeService,
+        ),
       ),
-      (route) =>
-          false,
+      (route) => false,
     );
   }
 
@@ -124,45 +115,75 @@ class _AdminDashboardScreenState
         Theme.of(context).brightness ==
             Brightness.dark;
 
-    final Color fondo =
-        oscuro
+    final Color fondo = oscuro
+        ? const Color(
+            0xFF171320,
+          )
+        : const Color(
+            0xFFF7F7F8,
+          );
+
+    return Scaffold(
+      backgroundColor: fondo,
+
+      // ========================================================
+      // APP BAR
+      // ========================================================
+
+      appBar: AppBar(
+        backgroundColor: oscuro
             ? const Color(
                 0xFF171320,
               )
             : const Color(
-                0xFFF7F7F8,
-              );
-
-    return Scaffold(
-      backgroundColor:
-          fondo,
-
-      appBar:
-          AppBar(
-        backgroundColor:
-            oscuro
-                ? const Color(
-                    0xFF171320,
-                  )
-                : Colors.white,
+                0xFFFF7E01,
+              ),
 
         surfaceTintColor:
             Colors.transparent,
 
-        elevation:
-            0,
+        elevation: 0,
 
-        title:
-            const Text(
-          'Mercalishuat Admin',
-          style:
-              TextStyle(
-            fontWeight:
-                FontWeight.w700,
+        // ======================================================
+        // VOLVER AL PERFIL
+        // ======================================================
+
+        leading: IconButton(
+          tooltip:
+              'Volver al perfil',
+
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: Colors.white,
           ),
+
+          onPressed: () {
+            Navigator.of(
+              context,
+            ).pop();
+          },
         ),
 
+        // ======================================================
+        // TÍTULO
+        // EN OSCURO NO MOSTRAR TEXTO EN APPBAR
+        // ======================================================
+
+        title: const Text(
+  'Panel administrativo',
+  style: TextStyle(
+    color: Colors.white,
+    fontWeight: FontWeight.w800,
+  ),
+),
+
+centerTitle: true,
+
         actions: [
+          // ====================================================
+          // ACTUALIZAR
+          // ====================================================
+
           IconButton(
             tooltip:
                 'Actualizar',
@@ -170,43 +191,45 @@ class _AdminDashboardScreenState
             onPressed:
                 _cargarDashboard,
 
-            icon:
-                const Icon(
+            icon: const Icon(
               Icons.refresh_rounded,
+              color: Colors.white,
             ),
           ),
 
+          // ====================================================
+          // MENÚ
+          // ====================================================
+
           PopupMenuButton<String>(
-            onSelected:
-                (
+            iconColor:
+                Colors.white,
+
+            onSelected: (
               value,
             ) {
-              if (
-                  value ==
+              if (value ==
                   'logout') {
                 _cerrarSesion();
               }
             },
 
-            itemBuilder:
-                (
+            itemBuilder: (
               context,
             ) =>
-                    const [
+                const [
               PopupMenuItem(
                 value:
                     'logout',
 
-                child:
-                    Row(
+                child: Row(
                   children: [
                     Icon(
                       Icons.logout_rounded,
                     ),
 
                     SizedBox(
-                      width:
-                          12,
+                      width: 12,
                     ),
 
                     Text(
@@ -220,13 +243,15 @@ class _AdminDashboardScreenState
         ],
       ),
 
-      body:
-          RefreshIndicator(
+      // ========================================================
+      // BODY
+      // ========================================================
+
+      body: RefreshIndicator(
         onRefresh:
             _cargarDashboard,
 
-        child:
-            _contenido(
+        child: _contenido(
           oscuro,
         ),
       ),
@@ -240,17 +265,35 @@ class _AdminDashboardScreenState
   Widget _contenido(
     bool oscuro,
   ) {
+    // ==========================================================
+    // CARGANDO
+    // ==========================================================
+
     if (_cargando) {
-      return const Center(
-        child:
-            CircularProgressIndicator(
-          color:
-              Color(
-            0xFFFF7E01,
+      return ListView(
+        physics:
+            const AlwaysScrollableScrollPhysics(),
+
+        children: const [
+          SizedBox(
+            height: 200,
           ),
-        ),
+
+          Center(
+            child:
+                CircularProgressIndicator(
+              color: Color(
+                0xFFFF7E01,
+              ),
+            ),
+          ),
+        ],
       );
     }
+
+    // ==========================================================
+    // ERROR
+    // ==========================================================
 
     if (_error != null) {
       return ListView(
@@ -264,37 +307,33 @@ class _AdminDashboardScreenState
 
         children: [
           const SizedBox(
-            height:
-                120,
+            height: 120,
           ),
 
           Icon(
             Icons.error_outline_rounded,
-            size:
-                64,
+            size: 64,
             color:
                 Colors.red.shade400,
           ),
 
           const SizedBox(
-            height:
-                20,
+            height: 20,
           ),
 
           Text(
             _error!,
             textAlign:
                 TextAlign.center,
+
             style:
                 const TextStyle(
-              fontSize:
-                  16,
+              fontSize: 16,
             ),
           ),
 
           const SizedBox(
-            height:
-                20,
+            height: 20,
           ),
 
           Center(
@@ -303,13 +342,11 @@ class _AdminDashboardScreenState
               onPressed:
                   _cargarDashboard,
 
-              icon:
-                  const Icon(
+              icon: const Icon(
                 Icons.refresh_rounded,
               ),
 
-              label:
-                  const Text(
+              label: const Text(
                 'Reintentar',
               ),
 
@@ -333,33 +370,42 @@ class _AdminDashboardScreenState
         _dashboard;
 
     if (dashboard == null) {
-      return const Center(
-        child:
-            Text(
-          'No hay información disponible',
-        ),
+      return ListView(
+        physics:
+            const AlwaysScrollableScrollPhysics(),
+
+        children: const [
+          SizedBox(
+            height: 180,
+          ),
+
+          Center(
+            child: Text(
+              'No hay información disponible',
+            ),
+          ),
+        ],
       );
     }
 
+    // ==========================================================
+    // DASHBOARD
+    // ==========================================================
+
     return LayoutBuilder(
-      builder:
-          (
+      builder: (
         context,
         constraints,
       ) {
-        int columnas =
-            2;
+        int columnas = 2;
 
-        if (
-            constraints.maxWidth >=
-                900) {
-          columnas =
-              4;
+        if (constraints.maxWidth >=
+            900) {
+          columnas = 4;
         } else if (
             constraints.maxWidth >=
                 600) {
-          columnas =
-              3;
+          columnas = 3;
         }
 
         return ListView(
@@ -369,18 +415,26 @@ class _AdminDashboardScreenState
           padding:
               const EdgeInsets.fromLTRB(
             20,
-            16,
+            20,
             20,
             32,
           ),
 
           children: [
+            // =================================================
+            // BANNER PANEL ADMINISTRATIVO
+            // SIEMPRE VISIBLE
+            // =================================================
+
             _encabezado(),
 
             const SizedBox(
-              height:
-                  24,
+              height: 24,
             ),
+
+            // =================================================
+            // ESTADÍSTICAS
+            // =================================================
 
             GridView.count(
               crossAxisCount:
@@ -440,7 +494,8 @@ class _AdminDashboardScreenState
                       dashboard.administradores,
 
                   icono:
-                      Icons.admin_panel_settings_outlined,
+                      Icons
+                          .admin_panel_settings_outlined,
 
                   oscuro:
                       oscuro,
@@ -491,12 +546,16 @@ class _AdminDashboardScreenState
             ),
 
             const SizedBox(
-              height:
-                  30,
+              height: 30,
             ),
+
+            // =================================================
+            // ADMINISTRACIÓN
+            // =================================================
 
             Text(
               'Administración',
+
               style:
                   Theme.of(context)
                       .textTheme
@@ -508,9 +567,12 @@ class _AdminDashboardScreenState
             ),
 
             const SizedBox(
-              height:
-                  14,
+              height: 14,
             ),
+
+            // =================================================
+            // GESTIONAR USUARIOS
+            // =================================================
 
             _opcionAdministrativa(
               titulo:
@@ -525,35 +587,56 @@ class _AdminDashboardScreenState
               habilitado:
                   true,
 
-              onTap: () {
-                Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) =>
-                      const AdminUsuariosScreen(),
-                    ),
-                );
-              },
-
               oscuro:
                   oscuro,
+
+              onTap: () {
+                Navigator.of(
+                  context,
+                ).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const AdminUsuariosScreen(),
+                  ),
+                );
+              },
             ),
+
+            // =================================================
+            // REPORTES Y MODERACIÓN
+            // =================================================
 
             _opcionAdministrativa(
               titulo:
-                  'Moderación',
+                  'Reportes y moderación',
 
               subtitulo:
-                  'Reportes, suspensiones y contenido',
+                  'Revisar reportes y moderar contenido',
 
               icono:
-                  Icons.gavel_outlined,
+                  Icons.flag_outlined,
 
               habilitado:
-                  false,
+                  true,
 
               oscuro:
                   oscuro,
+
+              onTap: () {
+                Navigator.of(
+                  context,
+                ).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const AdminReportesScreen(),
+                  ),
+                );
+              },
             ),
+
+            // =================================================
+            // LOCALES COMERCIALES
+            // =================================================
 
             _opcionAdministrativa(
               titulo:
@@ -571,6 +654,10 @@ class _AdminDashboardScreenState
               oscuro:
                   oscuro,
             ),
+
+            // =================================================
+            // MAPA ADMINISTRATIVO
+            // =================================================
 
             _opcionAdministrativa(
               titulo:
@@ -595,7 +682,8 @@ class _AdminDashboardScreenState
   }
 
   // ============================================================
-  // ENCABEZADO
+  // BANNER PANEL ADMINISTRATIVO
+  // SIEMPRE VISIBLE
   // ============================================================
 
   Widget _encabezado() {
@@ -603,9 +691,13 @@ class _AdminDashboardScreenState
         _dashboard!;
 
     return Container(
+      width:
+          double.infinity,
+
       padding:
-          const EdgeInsets.all(
-        20,
+          const EdgeInsets.symmetric(
+        horizontal: 20,
+        vertical: 20,
       ),
 
       decoration:
@@ -627,15 +719,36 @@ class _AdminDashboardScreenState
             Color(
               0xFFFF7E01,
             ),
+
             Color(
               0xFFFFA33B,
             ),
           ],
         ),
+
+        boxShadow: [
+          BoxShadow(
+            color:
+                const Color(
+                  0xFFFF7E01,
+                ).withValues(
+              alpha:
+                  0.18,
+            ),
+
+            blurRadius:
+                18,
+
+            offset:
+                const Offset(
+              0,
+              8,
+            ),
+          ),
+        ],
       ),
 
-      child:
-          Row(
+      child: Row(
         children: [
           Container(
             width:
@@ -662,8 +775,10 @@ class _AdminDashboardScreenState
             child:
                 const Icon(
               Icons.dashboard_rounded,
+
               color:
                   Colors.white,
+
               size:
                   30,
             ),
@@ -683,6 +798,7 @@ class _AdminDashboardScreenState
               children: [
                 const Text(
                   'Panel administrativo',
+
                   style:
                       TextStyle(
                     color:
@@ -703,16 +819,21 @@ class _AdminDashboardScreenState
 
                 Text(
                   '${dashboard.totalUsuarios} usuarios registrados',
+
                   style:
                       TextStyle(
                     color:
-                        Colors.white.withValues(
+                        Colors.white
+                            .withValues(
                       alpha:
-                          0.88,
+                          0.90,
                     ),
 
                     fontSize:
                         14,
+
+                    fontWeight:
+                        FontWeight.w500,
                   ),
                 ),
               ],
@@ -724,7 +845,7 @@ class _AdminDashboardScreenState
   }
 
   // ============================================================
-  // TARJETA
+  // TARJETA ESTADÍSTICA
   // ============================================================
 
   Widget _tarjetaEstadistica({
@@ -741,30 +862,29 @@ class _AdminDashboardScreenState
 
       decoration:
           BoxDecoration(
-        color:
-            oscuro
-                ? const Color(
-                    0xFF2A2045,
-                  )
-                : Colors.white,
+        color: oscuro
+            ? const Color(
+                0xFF2A2045,
+              )
+            : Colors.white,
 
         borderRadius:
             BorderRadius.circular(
           18,
         ),
 
-        border:
-            Border.all(
-          color:
-              oscuro
-                  ? Colors.white.withValues(
-                      alpha:
-                          0.06,
-                    )
-                  : Colors.black.withValues(
-                      alpha:
-                          0.06,
-                    ),
+        border: Border.all(
+          color: oscuro
+              ? Colors.white
+                  .withValues(
+                  alpha:
+                      0.06,
+                )
+              : Colors.black
+                  .withValues(
+                  alpha:
+                      0.06,
+                ),
         ),
 
         boxShadow:
@@ -773,7 +893,8 @@ class _AdminDashboardScreenState
                 : [
                     BoxShadow(
                       color:
-                          Colors.black.withValues(
+                          Colors.black
+                              .withValues(
                         alpha:
                             0.04,
                       ),
@@ -790,13 +911,13 @@ class _AdminDashboardScreenState
                   ],
       ),
 
-      child:
-          Column(
+      child: Column(
         crossAxisAlignment:
             CrossAxisAlignment.start,
 
         mainAxisAlignment:
-            MainAxisAlignment.spaceBetween,
+            MainAxisAlignment
+                .spaceBetween,
 
         children: [
           Container(
@@ -821,9 +942,9 @@ class _AdminDashboardScreenState
               ),
             ),
 
-            child:
-                Icon(
+            child: Icon(
               icono,
+
               color:
                   const Color(
                 0xFFFF7E01,
@@ -838,10 +959,12 @@ class _AdminDashboardScreenState
 
           Text(
             '$cantidad',
+
             style:
                 const TextStyle(
               fontSize:
                   28,
+
               fontWeight:
                   FontWeight.w800,
             ),
@@ -849,19 +972,21 @@ class _AdminDashboardScreenState
 
           Text(
             titulo,
+
             maxLines:
                 1,
+
             overflow:
                 TextOverflow.ellipsis,
+
             style:
                 TextStyle(
               fontSize:
                   13,
 
-              color:
-                  oscuro
-                      ? Colors.white70
-                      : Colors.black54,
+              color: oscuro
+                  ? Colors.white70
+                  : Colors.black54,
             ),
           ),
         ],
@@ -870,7 +995,7 @@ class _AdminDashboardScreenState
   }
 
   // ============================================================
-  // OPCIÓN
+  // OPCIÓN ADMINISTRATIVA
   // ============================================================
 
   Widget _opcionAdministrativa({
@@ -888,22 +1013,19 @@ class _AdminDashboardScreenState
             12,
       ),
 
-      child:
-          Material(
-        color:
-            oscuro
-                ? const Color(
-                    0xFF2A2045,
-                  )
-                : Colors.white,
+      child: Material(
+        color: oscuro
+            ? const Color(
+                0xFF2A2045,
+              )
+            : Colors.white,
 
         borderRadius:
             BorderRadius.circular(
           16,
         ),
 
-        child:
-            InkWell(
+        child: InkWell(
           borderRadius:
               BorderRadius.circular(
             16,
@@ -914,15 +1036,13 @@ class _AdminDashboardScreenState
                   ? onTap
                   : null,
 
-          child:
-              Padding(
+          child: Padding(
             padding:
                 const EdgeInsets.all(
               16,
             ),
 
-            child:
-                Row(
+            child: Row(
               children: [
                 Container(
                   width:
@@ -949,9 +1069,9 @@ class _AdminDashboardScreenState
                     ),
                   ),
 
-                  child:
-                      Icon(
+                  child: Icon(
                     icono,
+
                     color:
                         habilitado
                             ? const Color(
@@ -975,6 +1095,7 @@ class _AdminDashboardScreenState
                     children: [
                       Text(
                         titulo,
+
                         style:
                             TextStyle(
                           fontSize:
@@ -997,6 +1118,7 @@ class _AdminDashboardScreenState
 
                       Text(
                         subtitulo,
+
                         style:
                             TextStyle(
                           fontSize:
@@ -1010,8 +1132,7 @@ class _AdminDashboardScreenState
                   ),
                 ),
 
-                if (
-                    habilitado)
+                if (habilitado)
                   const Icon(
                     Icons.chevron_right_rounded,
                   )
@@ -1029,7 +1150,8 @@ class _AdminDashboardScreenState
                     decoration:
                         BoxDecoration(
                       color:
-                          Colors.grey.withValues(
+                          Colors.grey
+                              .withValues(
                         alpha:
                             0.12,
                       ),
@@ -1043,10 +1165,12 @@ class _AdminDashboardScreenState
                     child:
                         const Text(
                       'Próximamente',
+
                       style:
                           TextStyle(
                         fontSize:
                             11,
+
                         color:
                             Colors.grey,
                       ),
