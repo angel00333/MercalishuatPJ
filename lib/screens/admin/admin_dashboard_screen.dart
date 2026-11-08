@@ -7,6 +7,7 @@ import '../../services/theme_service.dart';
 import '../login_screen.dart';
 import 'admin_usuarios_screen.dart';
 import 'admin_reportes_screen.dart';
+import 'admin_locales_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final ThemeService themeService;
@@ -638,22 +639,35 @@ centerTitle: true,
             // LOCALES COMERCIALES
             // =================================================
 
-            _opcionAdministrativa(
-              titulo:
-                  'Locales comerciales',
+            
 
-              subtitulo:
-                  'Venta y alquiler de locales',
+_opcionAdministrativa(
+  titulo:
+      'Locales comerciales',
 
-              icono:
-                  Icons.apartment_outlined,
+  subtitulo:
+      'Consultar y moderar locales publicados',
 
-              habilitado:
-                  false,
+  icono:
+      Icons.apartment_outlined,
 
-              oscuro:
-                  oscuro,
-            ),
+  habilitado:
+      true,
+
+  oscuro:
+      oscuro,
+
+  onTap: () {
+    Navigator.of(
+      context,
+    ).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            const AdminLocalesScreen(),
+      ),
+    );
+  },
+),
 
             // =================================================
             // MAPA ADMINISTRATIVO

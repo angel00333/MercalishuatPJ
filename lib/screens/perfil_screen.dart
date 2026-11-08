@@ -19,6 +19,12 @@ import 'producto_actions/productos_screen.dart';
 import 'tienda_actions/mi_tienda_screen.dart';
 
 // ============================================================
+// LOCALES COMERCIALES
+// ============================================================
+
+import 'locales/locales_comerciales_screen.dart';
+
+// ============================================================
 // ADMIN
 // ============================================================
 
@@ -447,6 +453,27 @@ class _PerfilScreenState
             MiTiendaScreen(
           themeService:
               widget.themeService,
+        ),
+      ),
+    );
+  }
+
+  // ============================================
+  // LOCALES COMERCIALES
+  // ============================================
+
+  Future<void>
+      abrirLocalesComerciales() async {
+    final bool esEmprendedor =
+        rol == 'emprendedor';
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            LocalesComercialesScreen(
+          puedePublicar:
+              esEmprendedor,
         ),
       ),
     );
@@ -925,6 +952,37 @@ class _PerfilScreenState
 
                 onTap:
                     abrirGuardados,
+              ),
+
+            // =================================
+            // LOCALES COMERCIALES
+            //
+            // USUARIO:
+            // Ver, buscar, filtrar y consultar.
+            //
+            // EMPRENDEDOR:
+            // Además puede publicar y administrar.
+            //
+            // ADMINISTRADOR:
+            // Lo administrará desde su panel.
+            // =================================
+
+            if (!esAdministrador)
+              _opcion(
+                icon:
+                    Icons
+                        .business_outlined,
+
+                titulo:
+                    'Locales comerciales',
+
+                descripcion:
+                    esEmprendedor
+                        ? 'Ver locales disponibles o administrar tus publicaciones'
+                        : 'Locales disponibles para venta o alquiler',
+
+                onTap:
+                    abrirLocalesComerciales,
               ),
 
             // =================================
