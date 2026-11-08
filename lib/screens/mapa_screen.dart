@@ -11,8 +11,12 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../helpers/chat_helper.dart';
 import '../models/emprendimiento.dart';
+import '../models/local_comercial.dart';
 import '../services/emprendimiento_service.dart';
+import '../services/local_comercial_service.dart';
 import '../services/ruta_service.dart';
+
+import 'locales/detalle_local_comercial_screen.dart';
 
 class MapaScreen extends StatefulWidget {
   const MapaScreen({
@@ -92,6 +96,8 @@ class _MapaScreenState extends State<MapaScreen>
 
   // ============================================================
   // EMPRENDIMIENTOS
+  // PIN VERDE + EDIFICIO BLANCO
+  // assets/mapas/tienda.png
   // ============================================================
 
   static const String _sourceEmprendimientos =
@@ -100,16 +106,45 @@ class _MapaScreenState extends State<MapaScreen>
   static const String _layerEmprendimientos =
       'merc-emprendimientos-layer';
 
-  static const String _iconoTienda =
-      'merc-marker-tienda';
+  static const String _iconoEmprendimiento =
+      'merc-marker-emprendimiento';
 
-  bool _iconoTiendaCargado = false;
-
+  bool _iconoEmprendimientoCargado = false;
   bool _capaEmprendimientosCargada = false;
-
   bool _cargandoEmprendimientos = false;
+  bool _mostrarEmprendimientos = true;
 
   List<Emprendimiento> _emprendimientos = [];
+
+  // ============================================================
+  // LOCALES COMERCIALES
+  // PIN ROJO + TIENDA BLANCA
+  // assets/mapas/local.png
+  // ============================================================
+
+  static const String _sourceLocales =
+      'merc-locales-source';
+
+  static const String _layerLocales =
+      'merc-locales-layer';
+
+  static const String _iconoLocal =
+      'merc-marker-local';
+
+  bool _iconoLocalCargado = false;
+  bool _capaLocalesCargada = false;
+  bool _cargandoLocales = false;
+  bool _mostrarLocales = true;
+
+  List<LocalComercial> _locales = [];
+
+  // ============================================================
+  // CONTROL TAP LOCALES
+  // ============================================================
+
+  bool _abriendoLocal = false;
+  int? _ultimoLocalTocado;
+  DateTime? _ultimoTapLocal;
 
   // ============================================================
   // ESTILOS
@@ -227,6 +262,7 @@ class _MapaScreenState extends State<MapaScreen>
 
     _cargarGeoJson();
     _cargarEmprendimientos();
+    _cargarLocales();
   }
 
   // ============================================================
@@ -444,7 +480,7 @@ class _MapaScreenState extends State<MapaScreen>
           });
 
           if (_estiloCargado &&
-              _iconoTiendaCargado) {
+              _iconoEmprendimientoCargado) {
             await _dibujarEmprendimientos();
           }
         }
@@ -458,6 +494,73 @@ class _MapaScreenState extends State<MapaScreen>
         setState(() {
           _cargandoEmprendimientos =
               false;
+        });
+      }
+    }
+  }
+
+  // ============================================================
+  // CARGAR LOCALES COMERCIALES
+  // ============================================================
+
+  Future<void> _cargarLocales() async {
+    if (_cargandoLocales) {
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _cargandoLocales = true;
+      });
+    }
+
+    try {
+      final lista = <LocalComercial>[];
+
+      int pagina = 1;
+      int paginas = 1;
+
+      do {
+        final resultado =
+            await LocalComercialService.listar(
+          pagina: pagina,
+          limite: 100,
+        );
+
+        lista.addAll(
+          resultado.locales.where(
+            (local) =>
+                local.latitud != null &&
+                local.longitud != null &&
+                local.activo &&
+                local.disponible,
+          ),
+        );
+
+        paginas = resultado.paginas;
+        pagina++;
+      } while (pagina <= paginas);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _locales = lista;
+      });
+
+      if (_estiloCargado &&
+          _iconoLocalCargado) {
+        await _dibujarLocales();
+      }
+    } catch (e) {
+      debugPrint(
+        'ERROR CARGANDO LOCALES: $e',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _cargandoLocales = false;
         });
       }
     }
@@ -488,23 +591,24 @@ class _MapaScreenState extends State<MapaScreen>
     String layerId,
     Annotation? annotation,
   ) {
-    if (layerId !=
-        _layerEmprendimientos) {
+    final elementoId = int.tryParse(id);
+
+    if (elementoId == null) {
       return;
     }
 
-    final emprendimientoId =
-        int.tryParse(
-      id,
-    );
-
-    if (emprendimientoId == null) {
+    if (layerId == _layerEmprendimientos) {
+      _abrirEmprendimientoPorId(
+        elementoId,
+      );
       return;
     }
 
-    _abrirEmprendimientoPorId(
-      emprendimientoId,
-    );
+    if (layerId == _layerLocales) {
+      _abrirLocalPorId(
+        elementoId,
+      );
+    }
   }
 
   // ============================================================
@@ -515,22 +619,33 @@ class _MapaScreenState extends State<MapaScreen>
     Point<double> point,
     LatLng coordinates,
   ) async {
-    final controller =
-        _mapController;
+    final controller = _mapController;
 
     if (controller == null ||
-        !_capaEmprendimientosCargada) {
+        (!_capaEmprendimientosCargada &&
+            !_capaLocalesCargada)) {
       return;
     }
 
     try {
+      final capas = <String>[];
+
+      if (_capaEmprendimientosCargada) {
+        capas.add(_layerEmprendimientos);
+      }
+
+      if (_capaLocalesCargada) {
+        capas.add(_layerLocales);
+      }
+
+      if (capas.isEmpty) {
+        return;
+      }
+
       final features =
-          await controller
-              .queryRenderedFeatures(
+          await controller.queryRenderedFeatures(
         point,
-        const [
-          _layerEmprendimientos,
-        ],
+        capas,
         null,
       );
 
@@ -544,44 +659,49 @@ class _MapaScreenState extends State<MapaScreen>
           rawFeature,
         );
 
-        int? emprendimientoId;
+        final propiedadesRaw =
+            feature['properties'];
 
-        final id = feature['id'];
-
-        if (id != null) {
-          emprendimientoId =
-              int.tryParse(
-            id.toString(),
-          );
+        if (propiedadesRaw is! Map) {
+          continue;
         }
 
-        if (emprendimientoId ==
-            null) {
-          final propiedades =
-              feature['properties'];
+        final propiedades =
+            Map<String, dynamic>.from(
+          propiedadesRaw,
+        );
 
-          if (propiedades is Map) {
-            final p =
-                Map<String, dynamic>.from(
-              propiedades,
-            );
+        final tipo =
+            propiedades['tipo']?.toString() ?? '';
 
-            emprendimientoId =
-                int.tryParse(
-              p['emprendimiento_id']
-                      ?.toString() ??
-                  '',
+        if (tipo == 'emprendimiento') {
+          final emprendimientoId = int.tryParse(
+            propiedades['emprendimiento_id']
+                    ?.toString() ??
+                '',
+          );
+
+          if (emprendimientoId != null) {
+            await _abrirEmprendimientoPorId(
+              emprendimientoId,
             );
+            return;
           }
         }
 
-        if (emprendimientoId !=
-            null) {
-          await _abrirEmprendimientoPorId(
-            emprendimientoId,
+        if (tipo == 'local_comercial') {
+          final localId = int.tryParse(
+            propiedades['local_id']
+                    ?.toString() ??
+                '',
           );
 
-          return;
+          if (localId != null) {
+            await _abrirLocalPorId(
+              localId,
+            );
+            return;
+          }
         }
       }
     } catch (e) {
@@ -657,19 +777,73 @@ class _MapaScreenState extends State<MapaScreen>
   }
 
   // ============================================================
+  // ABRIR LOCAL COMERCIAL
+  // ============================================================
+
+  Future<void> _abrirLocalPorId(
+    int id,
+  ) async {
+    if (!mounted || _abriendoLocal) {
+      return;
+    }
+
+    final ahora = DateTime.now();
+
+    if (_ultimoLocalTocado == id &&
+        _ultimoTapLocal != null &&
+        ahora
+                .difference(
+                  _ultimoTapLocal!,
+                )
+                .inMilliseconds <
+            650) {
+      return;
+    }
+
+    LocalComercial? seleccionado;
+
+    for (final local in _locales) {
+      if (local.id == id) {
+        seleccionado = local;
+        break;
+      }
+    }
+
+    if (seleccionado == null) {
+      return;
+    }
+
+    _ultimoLocalTocado = id;
+    _ultimoTapLocal = ahora;
+    _abriendoLocal = true;
+
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              DetalleLocalComercialScreen(
+            localId: seleccionado!.id,
+          ),
+        ),
+      );
+    } finally {
+      _abriendoLocal = false;
+    }
+  }
+
+  // ============================================================
   // ESTILO CARGADO
   // ============================================================
 
-  Future<void>
-      _onStyleLoaded() async {
+  Future<void> _onStyleLoaded() async {
     _capasCargadas = false;
-
     _marcadorUsuario = null;
 
-    _iconoTiendaCargado = false;
+    _iconoEmprendimientoCargado = false;
+    _iconoLocalCargado = false;
 
-    _capaEmprendimientosCargada =
-        false;
+    _capaEmprendimientosCargada = false;
+    _capaLocalesCargada = false;
 
     _rutaCreada = false;
 
@@ -685,9 +859,9 @@ class _MapaScreenState extends State<MapaScreen>
       await _agregarCapas();
     }
 
-    await _cargarIconoTienda();
-
+    await _cargarIconosMapa();
     await _dibujarEmprendimientos();
+    await _dibujarLocales();
 
     if (_geoJsonRutaActual != null) {
       await _dibujarRuta(
@@ -699,8 +873,7 @@ class _MapaScreenState extends State<MapaScreen>
       await _actualizarMarcadorGps(
         _puntoGpsVisual!,
       );
-    } else if (_posicionUsuario !=
-        null) {
+    } else if (_posicionUsuario != null) {
       final punto = LatLng(
         _posicionUsuario!.latitude,
         _posicionUsuario!.longitude,
@@ -714,8 +887,7 @@ class _MapaScreenState extends State<MapaScreen>
     }
 
     if (_primeraCargaEstilo) {
-      _primeraCargaEstilo =
-          false;
+      _primeraCargaEstilo = false;
     } else {
       await _restaurarCamara();
     }
@@ -777,17 +949,35 @@ class _MapaScreenState extends State<MapaScreen>
   }
 
   // ============================================================
-  // ICONO TIENDA
+  // ICONOS DE MARCADORES
   // ============================================================
 
-  Future<void>
-      _cargarIconoTienda() async {
-    final controller =
-        _mapController;
+  Future<void> _cargarIconosMapa() async {
+    if (!_iconoEmprendimientoCargado) {
+      _iconoEmprendimientoCargado =
+          await _registrarIconoMapa(
+        asset: 'assets/mapas/tienda.png',
+        nombre: _iconoEmprendimiento,
+      );
+    }
 
-    if (controller == null ||
-        _iconoTiendaCargado) {
-      return;
+    if (!_iconoLocalCargado) {
+      _iconoLocalCargado =
+          await _registrarIconoMapa(
+        asset: 'assets/mapas/local.png',
+        nombre: _iconoLocal,
+      );
+    }
+  }
+
+  Future<bool> _registrarIconoMapa({
+    required String asset,
+    required String nombre,
+  }) async {
+    final controller = _mapController;
+
+    if (controller == null) {
+      return false;
     }
 
     ui.Codec? codec;
@@ -795,19 +985,16 @@ class _MapaScreenState extends State<MapaScreen>
 
     try {
       final ByteData data =
-          await rootBundle.load(
-        'assets/mapas/marcador_tienda.png',
-      );
+          await rootBundle.load(asset);
 
-      final Uint8List bytes =
+      final Uint8List bytesOriginales =
           data.buffer.asUint8List(
         data.offsetInBytes,
         data.lengthInBytes,
       );
 
-      codec =
-          await ui.instantiateImageCodec(
-        bytes,
+      codec = await ui.instantiateImageCodec(
+        bytesOriginales,
         targetWidth: 96,
       );
 
@@ -818,12 +1005,11 @@ class _MapaScreenState extends State<MapaScreen>
 
       final pngData =
           await imagen.toByteData(
-        format:
-            ui.ImageByteFormat.png,
+        format: ui.ImageByteFormat.png,
       );
 
       if (pngData == null) {
-        return;
+        return false;
       }
 
       final bytesFinales =
@@ -833,15 +1019,16 @@ class _MapaScreenState extends State<MapaScreen>
       );
 
       await controller.addImage(
-        _iconoTienda,
+        nombre,
         bytesFinales,
       );
 
-      _iconoTiendaCargado = true;
+      return true;
     } catch (e) {
       debugPrint(
-        'ERROR ICONO: $e',
+        'ERROR CARGANDO ICONO $asset: $e',
       );
+      return false;
     } finally {
       imagen?.dispose();
       codec?.dispose();
@@ -973,14 +1160,12 @@ class _MapaScreenState extends State<MapaScreen>
   // DIBUJAR EMPRENDIMIENTOS
   // ============================================================
 
-  Future<void>
-      _dibujarEmprendimientos() async {
-    final controller =
-        _mapController;
+  Future<void> _dibujarEmprendimientos() async {
+    final controller = _mapController;
 
     if (controller == null ||
         !_estiloCargado ||
-        !_iconoTiendaCargado) {
+        !_iconoEmprendimientoCargado) {
       return;
     }
 
@@ -988,51 +1173,44 @@ class _MapaScreenState extends State<MapaScreen>
       final features =
           <Map<String, dynamic>>[];
 
-      for (final emprendimiento
-          in _emprendimientos) {
-        if (emprendimiento.latitud ==
-                null ||
-            emprendimiento.longitud ==
-                null) {
-          continue;
-        }
+      if (_mostrarEmprendimientos) {
+        for (final emprendimiento
+            in _emprendimientos) {
+          if (emprendimiento.latitud == null ||
+              emprendimiento.longitud == null) {
+            continue;
+          }
 
-        features.add({
-          'type': 'Feature',
-          'id':
-              emprendimiento.id.toString(),
-          'properties': {
-            'tipo': 'emprendimiento',
-            'nombre':
-                emprendimiento.nombre,
-            'emprendimiento_id':
-                emprendimiento.id,
-          },
-          'geometry': {
-            'type': 'Point',
-            'coordinates': [
-              emprendimiento.longitud!,
-              emprendimiento.latitud!,
-            ],
-          },
-        });
+          features.add({
+            'type': 'Feature',
+            'id': emprendimiento.id.toString(),
+            'properties': {
+              'tipo': 'emprendimiento',
+              'nombre': emprendimiento.nombre,
+              'emprendimiento_id':
+                  emprendimiento.id,
+            },
+            'geometry': {
+              'type': 'Point',
+              'coordinates': [
+                emprendimiento.longitud!,
+                emprendimiento.latitud!,
+              ],
+            },
+          });
+        }
       }
 
-      final geojson =
-          <String, dynamic>{
-        'type':
-            'FeatureCollection',
-        'features':
-            features,
+      final geojson = <String, dynamic>{
+        'type': 'FeatureCollection',
+        'features': features,
       };
 
       if (_capaEmprendimientosCargada) {
-        await controller
-            .setGeoJsonSource(
+        await controller.setGeoJsonSource(
           _sourceEmprendimientos,
           geojson,
         );
-
         return;
       }
 
@@ -1045,30 +1223,106 @@ class _MapaScreenState extends State<MapaScreen>
         _sourceEmprendimientos,
         _layerEmprendimientos,
         const SymbolLayerProperties(
-          iconImage:
-              _iconoTienda,
-          iconSize:
-              0.85,
-          iconAnchor:
-              'bottom',
-          iconAllowOverlap:
-              true,
-          iconIgnorePlacement:
-              true,
-          iconOptional:
-              false,
-          iconOpacity:
-              1,
+          iconImage: _iconoEmprendimiento,
+          iconSize: 0.55,
+          iconAnchor: 'bottom',
+          iconAllowOverlap: true,
+          iconIgnorePlacement: true,
+          iconOptional: false,
+          iconOpacity: 1,
         ),
-        enableInteraction:
-            true,
+        enableInteraction: true,
       );
 
-      _capaEmprendimientosCargada =
-          true;
+      _capaEmprendimientosCargada = true;
     } catch (e) {
       debugPrint(
-        'ERROR TIENDAS: $e',
+        'ERROR DIBUJANDO EMPRENDIMIENTOS: $e',
+      );
+    }
+  }
+
+  // ============================================================
+  // DIBUJAR LOCALES COMERCIALES
+  // ============================================================
+
+  Future<void> _dibujarLocales() async {
+    final controller = _mapController;
+
+    if (controller == null ||
+        !_estiloCargado ||
+        !_iconoLocalCargado) {
+      return;
+    }
+
+    try {
+      final features =
+          <Map<String, dynamic>>[];
+
+      if (_mostrarLocales) {
+        for (final local in _locales) {
+          if (local.latitud == null ||
+              local.longitud == null) {
+            continue;
+          }
+
+          features.add({
+            'type': 'Feature',
+            'id': local.id.toString(),
+            'properties': {
+              'tipo': 'local_comercial',
+              'local_id': local.id,
+              'nombre': local.titulo,
+              'operacion': local.tipoOperacion,
+            },
+            'geometry': {
+              'type': 'Point',
+              'coordinates': [
+                local.longitud!,
+                local.latitud!,
+              ],
+            },
+          });
+        }
+      }
+
+      final geojson = <String, dynamic>{
+        'type': 'FeatureCollection',
+        'features': features,
+      };
+
+      if (_capaLocalesCargada) {
+        await controller.setGeoJsonSource(
+          _sourceLocales,
+          geojson,
+        );
+        return;
+      }
+
+      await controller.addGeoJsonSource(
+        _sourceLocales,
+        geojson,
+      );
+
+      await controller.addSymbolLayer(
+        _sourceLocales,
+        _layerLocales,
+        const SymbolLayerProperties(
+          iconImage: _iconoLocal,
+          iconSize: 0.55,
+          iconAnchor: 'bottom',
+          iconAllowOverlap: true,
+          iconIgnorePlacement: true,
+          iconOptional: false,
+          iconOpacity: 1,
+        ),
+        enableInteraction: true,
+      );
+
+      _capaLocalesCargada = true;
+    } catch (e) {
+      debugPrint(
+        'ERROR DIBUJANDO LOCALES: $e',
       );
     }
   }
@@ -2537,6 +2791,214 @@ class _MapaScreenState extends State<MapaScreen>
   }
 
   // ============================================================
+  // SELECTOR CONTENIDO MAPA
+  // ============================================================
+
+  void _mostrarSelectorContenidoMapa() {
+    if (!mounted) {
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (bottomContext) {
+        final oscuro =
+            Theme.of(bottomContext).brightness ==
+                Brightness.dark;
+
+        return StatefulBuilder(
+          builder: (
+            context,
+            setModalState,
+          ) {
+            return SafeArea(
+              child: Padding(
+                padding:
+                    const EdgeInsets.fromLTRB(
+                  16,
+                  0,
+                  16,
+                  20,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.stretch,
+                  children: [
+                    const Padding(
+                      padding:
+                          EdgeInsets.fromLTRB(
+                        8,
+                        4,
+                        8,
+                        14,
+                      ),
+                      child: Text(
+                        'Mostrar en el mapa',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight:
+                              FontWeight.bold,
+                        ),
+                      ),
+                    ),
+
+                    // ==========================================
+                    // EMPRENDIMIENTOS
+                    // ==========================================
+
+                    ListTile(
+                      shape:
+                          RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(
+                          14,
+                        ),
+                      ),
+                      tileColor:
+                          _mostrarEmprendimientos
+                              ? Colors.green.withValues(
+                                  alpha: oscuro
+                                      ? 0.18
+                                      : 0.10,
+                                )
+                              : null,
+                      leading: SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: Image.asset(
+                          'assets/mapas/tienda.png',
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                      title: const Text(
+                        'Emprendimientos',
+                        style: TextStyle(
+                          fontWeight:
+                              FontWeight.w700,
+                        ),
+                      ),
+                      subtitle: const Text(
+                        'Negocios y emprendimientos registrados',
+                      ),
+                      trailing: Switch(
+                        value:
+                            _mostrarEmprendimientos,
+                        activeThumbColor:
+                            Colors.green,
+                        onChanged: (value) async {
+                          setState(() {
+                            _mostrarEmprendimientos =
+                                value;
+                          });
+
+                          setModalState(() {});
+
+                          await _dibujarEmprendimientos();
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    // ==========================================
+                    // LOCALES COMERCIALES
+                    // ==========================================
+
+                    ListTile(
+                      shape:
+                          RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(
+                          14,
+                        ),
+                      ),
+                      tileColor: _mostrarLocales
+                          ? Colors.red.withValues(
+                              alpha: oscuro
+                                  ? 0.18
+                                  : 0.08,
+                            )
+                          : null,
+                      leading: SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: Image.asset(
+                          'assets/mapas/local.png',
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                      title: const Text(
+                        'Locales comerciales',
+                        style: TextStyle(
+                          fontWeight:
+                              FontWeight.w700,
+                        ),
+                      ),
+                      subtitle: const Text(
+                        'Locales disponibles para venta o alquiler',
+                      ),
+                      trailing: Switch(
+                        value: _mostrarLocales,
+                        activeThumbColor: Colors.red,
+                        onChanged: (value) async {
+                          setState(() {
+                            _mostrarLocales = value;
+                          });
+
+                          setModalState(() {});
+
+                          await _dibujarLocales();
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    Container(
+                      padding:
+                          const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: oscuro
+                            ? Colors.white.withValues(
+                                alpha: 0.05,
+                              )
+                            : Colors.black.withValues(
+                                alpha: 0.03,
+                              ),
+                        borderRadius:
+                            BorderRadius.circular(14),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            size: 18,
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Verde: emprendimientos · Rojo: locales comerciales',
+                              style: TextStyle(
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ============================================================
   // GPS DESACTIVADO
   // ============================================================
 
@@ -3220,6 +3682,25 @@ class _MapaScreenState extends State<MapaScreen>
                       _rotacionActiva
                           ? _naranjaPrincipal
                           : Colors.grey,
+                ),
+
+                const SizedBox(
+                  height: 10,
+                ),
+
+                // =================================================
+                // CONTENIDO DEL MAPA
+                // =================================================
+
+                _boton(
+                  tag:
+                      'contenidoMapaUsuario',
+                  icon:
+                      Icons.layers_outlined,
+                  onPressed:
+                      _mostrarSelectorContenidoMapa,
+                  oscuro:
+                      oscuro,
                 ),
               ],
             ),

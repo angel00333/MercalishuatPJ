@@ -8,6 +8,7 @@ import '../login_screen.dart';
 import 'admin_usuarios_screen.dart';
 import 'admin_reportes_screen.dart';
 import 'admin_locales_screen.dart';
+import 'admin_mapa_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final ThemeService themeService;
@@ -674,21 +675,32 @@ _opcionAdministrativa(
             // =================================================
 
             _opcionAdministrativa(
-              titulo:
-                  'Mapa administrativo',
+  titulo:
+      'Mapa administrativo',
 
-              subtitulo:
-                  'Indicadores por departamento',
+  subtitulo:
+      'Actividad territorial y concentración por departamento',
 
-              icono:
-                  Icons.map_outlined,
+  icono:
+      Icons.map_outlined,
 
-              habilitado:
-                  false,
+  habilitado:
+      true,
 
-              oscuro:
-                  oscuro,
-            ),
+  oscuro:
+      oscuro,
+
+  onTap: () {
+    Navigator.of(
+      context,
+    ).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            const AdminMapaScreen(),
+      ),
+    );
+  },
+),
           ],
         );
       },
