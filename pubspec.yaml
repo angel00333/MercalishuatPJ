@@ -105,6 +105,13 @@ flutter:
     - assets/mapas/openfreemap_mercali_dark.json
     - assets/mapas/tienda.png
     - assets/mapas/local.png
+    - assets/banners/banner1.png
+    - assets/banners/banner2.png
+    - assets/banners/banner3.png
+    - assets/banners/banner4.png
+    - assets/banners/banner5.png
+    - assets/banners/banner6.png
+    - assets/nav/nav.png
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

@@ -1,19 +1,38 @@
 import 'package:flutter/material.dart';
 
+import '../../config/app_theme.dart';
+
 import '../../models/mensaje.dart';
+
 import '../../services/chat_service.dart';
 import '../../services/chat_socket_service.dart';
 
 class ChatScreen extends StatefulWidget {
   final int conversacionId;
+
+  // ============================================================
+  // PROPIETARIO
+  // ============================================================
+
   final String nombreUsuario;
+
   final String? imagenUsuarioUrl;
+
+  // ============================================================
+  // EMPRENDIMIENTO
+  // ============================================================
+
+  final String? nombreEmprendimiento;
+
+  final String? imagenEmprendimientoUrl;
 
   const ChatScreen({
     super.key,
     required this.conversacionId,
     required this.nombreUsuario,
     this.imagenUsuarioUrl,
+    this.nombreEmprendimiento,
+    this.imagenEmprendimientoUrl,
   });
 
   @override
@@ -22,17 +41,19 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  static const Color naranja =
-      Color(0xFFFF7E01);
-
-  static const Color panelOscuro =
-      Color(0xFF2A2045);
+  // ============================================================
+  // CONTROLLERS
+  // ============================================================
 
   final TextEditingController mensajeController =
       TextEditingController();
 
   final ScrollController scrollController =
       ScrollController();
+
+  // ============================================================
+  // DATOS
+  // ============================================================
 
   List<Mensaje> mensajes = [];
 
@@ -43,6 +64,69 @@ class _ChatScreenState extends State<ChatScreen> {
   String? error;
 
   bool _socketPreparado = false;
+
+  // ============================================================
+  // DATOS VISUALES DEL CHAT
+  // ============================================================
+
+  bool get _tieneEmprendimiento {
+    return widget.nombreEmprendimiento != null &&
+        widget.nombreEmprendimiento!
+            .trim()
+            .isNotEmpty;
+  }
+
+  String get _tituloChat {
+    if (_tieneEmprendimiento) {
+      return widget.nombreEmprendimiento!
+          .trim();
+    }
+
+    final nombre =
+        widget.nombreUsuario.trim();
+
+    return nombre.isNotEmpty
+        ? nombre
+        : 'Conversación';
+  }
+
+  String get _subtituloChat {
+    if (_tieneEmprendimiento) {
+      final propietario =
+          widget.nombreUsuario.trim();
+
+      return propietario.isNotEmpty
+          ? propietario
+          : 'Propietario';
+    }
+
+    return 'Conversación';
+  }
+
+  String? get _imagenChat {
+    final emprendimiento =
+        widget.imagenEmprendimientoUrl
+            ?.trim();
+
+    if (emprendimiento != null &&
+        emprendimiento.isNotEmpty) {
+      return emprendimiento;
+    }
+
+    final usuario =
+        widget.imagenUsuarioUrl?.trim();
+
+    if (usuario != null &&
+        usuario.isNotEmpty) {
+      return usuario;
+    }
+
+    return null;
+  }
+
+  // ============================================================
+  // INIT
+  // ============================================================
 
   @override
   void initState() {
@@ -62,7 +146,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // ============================================================
-  // PREPARAR SOCKET
+  // SOCKET
   // ============================================================
 
   Future<void> _prepararSocket() async {
@@ -70,9 +154,7 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    await ChatSocketService
-        .instance
-        .conectar();
+    await ChatSocketService.instance.conectar();
 
     if (!mounted) {
       return;
@@ -82,33 +164,21 @@ class _ChatScreenState extends State<ChatScreen> {
     // ENTRAR A LA CONVERSACIÓN
     // ==========================================================
 
-    ChatSocketService
-        .instance
-        .entrarConversacion(
+    ChatSocketService.instance.entrarConversacion(
       widget.conversacionId,
     );
 
     // ==========================================================
-    // SI EL SOCKET SE RECONECTA
-    //
-    // vuelve a entrar a la conversación automáticamente.
+    // RECONEXIÓN
     // ==========================================================
 
-    ChatSocketService
-        .instance
-        .escucharConexion(
+    ChatSocketService.instance.escucharConexion(
       () {
         if (!mounted) {
           return;
         }
 
-        debugPrint(
-          'CHAT SOCKET RECONECTADO',
-        );
-
-        ChatSocketService
-            .instance
-            .entrarConversacion(
+        ChatSocketService.instance.entrarConversacion(
           widget.conversacionId,
         );
       },
@@ -118,9 +188,7 @@ class _ChatScreenState extends State<ChatScreen> {
     // NUEVO MENSAJE
     // ==========================================================
 
-    ChatSocketService
-        .instance
-        .escucharNuevoMensaje(
+    ChatSocketService.instance.escucharNuevoMensaje(
       (
         data,
       ) async {
@@ -135,24 +203,25 @@ class _ChatScreenState extends State<ChatScreen> {
               '',
         );
 
-        // El mensaje pertenece a otro chat.
-        if (
-          conversacionId !=
-          widget.conversacionId
-        ) {
+        if (conversacionId !=
+            widget.conversacionId) {
           return;
         }
 
         try {
-          final Mensaje mensaje =
+          final mensaje =
               Mensaje.fromJson(
-            data,
+            Map<String, dynamic>.from(
+              data,
+            ),
           );
 
           final bool yaExiste =
               mensajes.any(
-            (m) =>
-                m.id ==
+            (
+              actual,
+            ) =>
+                actual.id ==
                 mensaje.id,
           );
 
@@ -166,15 +235,9 @@ class _ChatScreenState extends State<ChatScreen> {
             );
           });
 
-          // ====================================================
-          // COMO EL CHAT ESTÁ ABIERTO, MARCAR COMO LEÍDO
-          // ====================================================
-
-          await ChatService
-              .marcarComoLeidos(
+          await ChatService.marcarComoLeidos(
             conversacionId:
-                widget
-                    .conversacionId,
+                widget.conversacionId,
           );
 
           _bajar();
@@ -188,21 +251,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
     // ==========================================================
     // MENSAJES LEÍDOS
-    //
-    // El backend emite:
-    //
-    // {
-    //   conversacion_id: 1,
-    //   lector_id: 5
-    // }
-    //
-    // Cuando llega este evento significa que el otro usuario
-    // abrió/leyó nuestros mensajes.
     // ==========================================================
 
-    ChatSocketService
-        .instance
-        .escucharMensajesLeidos(
+    ChatSocketService.instance.escucharMensajesLeidos(
       (
         data,
       ) {
@@ -217,16 +268,10 @@ class _ChatScreenState extends State<ChatScreen> {
               '',
         );
 
-        if (
-          conversacionId !=
-          widget.conversacionId
-        ) {
+        if (conversacionId !=
+            widget.conversacionId) {
           return;
         }
-
-        debugPrint(
-          'MENSAJES LEÍDOS EN CONVERSACIÓN $conversacionId',
-        );
 
         _marcarMensajesPropiosComoLeidos();
       },
@@ -236,7 +281,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // ============================================================
-  // ACTUALIZAR ✓ -> ✓✓
+  // MARCAR MENSAJES PROPIOS COMO LEÍDOS
   // ============================================================
 
   void _marcarMensajesPropiosComoLeidos() {
@@ -244,45 +289,40 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    bool huboCambios = false;
+    bool huboCambios =
+        false;
 
-    final List<Mensaje> actualizados =
+    final actualizados =
         mensajes.map(
       (
         mensaje,
       ) {
-        if (
-          mensaje.esMio &&
-          !mensaje.leido
-        ) {
-          huboCambios = true;
+        if (mensaje.esMio &&
+            !mensaje.leido) {
+          huboCambios =
+              true;
 
           return Mensaje(
             id:
                 mensaje.id,
 
             conversacionId:
-                mensaje
-                    .conversacionId,
+                mensaje.conversacionId,
 
             remitenteId:
-                mensaje
-                    .remitenteId,
+                mensaje.remitenteId,
 
             contenido:
-                mensaje
-                    .contenido,
+                mensaje.contenido,
 
             leido:
                 true,
 
             createdAt:
-                mensaje
-                    .createdAt,
+                mensaje.createdAt,
 
             esMio:
-                mensaje
-                    .esMio,
+                mensaje.esMio,
           );
         }
 
@@ -307,10 +347,8 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _cargarMensajes({
     bool mostrarCarga = true,
   }) async {
-    if (
-      mostrarCarga &&
-      mounted
-    ) {
+    if (mostrarCarga &&
+        mounted) {
       setState(() {
         cargando =
             true;
@@ -322,42 +360,28 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final resultado =
-          await ChatService
-              .obtenerMensajes(
+          await ChatService.obtenerMensajes(
         conversacionId:
-            widget
-                .conversacionId,
+            widget.conversacionId,
       );
 
       if (!mounted) {
         return;
       }
 
-      if (
-        resultado['success'] ==
-        true
-      ) {
+      if (resultado['success'] == true) {
         final dynamic raw =
-            resultado[
-                'mensajes'];
+            resultado['mensajes'];
 
-        final List<Mensaje> lista =
-            [];
+        final List<Mensaje> lista = [];
 
         if (raw is List) {
-          for (
-            final item
-            in raw
-          ) {
-            if (
-              item is Mensaje
-            ) {
+          for (final item in raw) {
+            if (item is Mensaje) {
               lista.add(
                 item,
               );
-            } else if (
-              item is Map
-            ) {
+            } else if (item is Map) {
               try {
                 lista.add(
                   Mensaje.fromJson(
@@ -386,15 +410,9 @@ class _ChatScreenState extends State<ChatScreen> {
               null;
         });
 
-        // ======================================================
-        // MARCAR MENSAJES RECIBIDOS COMO LEÍDOS
-        // ======================================================
-
-        await ChatService
-            .marcarComoLeidos(
+        await ChatService.marcarComoLeidos(
           conversacionId:
-              widget
-                  .conversacionId,
+              widget.conversacionId,
         );
 
         _bajar();
@@ -411,16 +429,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     ?.toString() ??
                 'No se pudieron cargar los mensajes';
       });
-    } catch (
-      e,
-      stack
-    ) {
+    } catch (e) {
       debugPrint(
         'ERROR CARGANDO CHAT: $e',
-      );
-
-      debugPrint(
-        '$stack',
       );
 
       if (!mounted) {
@@ -438,29 +449,25 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // ============================================================
-  // BAJAR AL ÚLTIMO MENSAJE
+  // SCROLL ABAJO
   // ============================================================
 
   void _bajar() {
-    WidgetsBinding
-        .instance
-        .addPostFrameCallback(
-      (_) {
-        if (
-          !mounted ||
-          !scrollController
-              .hasClients
-        ) {
+    WidgetsBinding.instance.addPostFrameCallback(
+      (
+        _,
+      ) {
+        if (!mounted ||
+            !scrollController.hasClients) {
           return;
         }
 
-        final double destino =
+        final destino =
             scrollController
                 .position
                 .maxScrollExtent;
 
-        scrollController
-            .animateTo(
+        scrollController.animateTo(
           destino,
 
           duration:
@@ -481,14 +488,11 @@ class _ChatScreenState extends State<ChatScreen> {
   // ============================================================
 
   Future<void> _enviarMensaje() async {
-    final String contenido =
-        mensajeController.text
-            .trim();
+    final contenido =
+        mensajeController.text.trim();
 
-    if (
-      contenido.isEmpty ||
-      enviando
-    ) {
+    if (contenido.isEmpty ||
+        enviando) {
       return;
     }
 
@@ -499,11 +503,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final resultado =
-          await ChatService
-              .enviarMensaje(
+          await ChatService.enviarMensaje(
         conversacionId:
-            widget
-                .conversacionId,
+            widget.conversacionId,
 
         contenido:
             contenido,
@@ -518,13 +520,8 @@ class _ChatScreenState extends State<ChatScreen> {
             false;
       });
 
-      if (
-        resultado['success'] !=
-        true
-      ) {
-        ScaffoldMessenger.of(
-          context,
-        )
+      if (resultado['success'] != true) {
+        ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(
             SnackBar(
@@ -540,24 +537,24 @@ class _ChatScreenState extends State<ChatScreen> {
         return;
       }
 
-      mensajeController
-          .clear();
+      mensajeController.clear();
 
-      // ========================================================
-      // EL ChatService YA DEVUELVE Mensaje
-      // ========================================================
+      setState(() {});
 
       final dynamic rawMensaje =
-          resultado[
-              'mensaje'];
+          resultado['mensaje'];
 
-      if (
-        rawMensaje is Mensaje
-      ) {
+      // ========================================================
+      // MENSAJE YA CONVERTIDO
+      // ========================================================
+
+      if (rawMensaje is Mensaje) {
         final bool yaExiste =
             mensajes.any(
-          (m) =>
-              m.id ==
+          (
+            mensaje,
+          ) =>
+              mensaje.id ==
               rawMensaje.id,
         );
 
@@ -568,11 +565,15 @@ class _ChatScreenState extends State<ChatScreen> {
             );
           });
         }
-      } else if (
-        rawMensaje is Map
-      ) {
+      }
+
+      // ========================================================
+      // MENSAJE JSON
+      // ========================================================
+
+      else if (rawMensaje is Map) {
         try {
-          final Mensaje mensaje =
+          final mensaje =
               Mensaje.fromJson(
             Map<String, dynamic>.from(
               rawMensaje,
@@ -581,8 +582,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
           final bool yaExiste =
               mensajes.any(
-            (m) =>
-                m.id ==
+            (
+              actual,
+            ) =>
+                actual.id ==
                 mensaje.id,
           );
 
@@ -593,17 +596,19 @@ class _ChatScreenState extends State<ChatScreen> {
               );
             });
           }
-        } catch (e) {
-          debugPrint(
-            'ERROR AGREGANDO MENSAJE ENVIADO: $e',
-          );
-
+        } catch (_) {
           await _cargarMensajes(
             mostrarCarga:
                 false,
           );
         }
-      } else {
+      }
+
+      // ========================================================
+      // FALLBACK
+      // ========================================================
+
+      else {
         await _cargarMensajes(
           mostrarCarga:
               false,
@@ -612,6 +617,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
       _bajar();
     } catch (e) {
+      debugPrint(
+        'ERROR ENVIANDO MENSAJE: $e',
+      );
+
       if (!mounted) {
         return;
       }
@@ -621,9 +630,7 @@ class _ChatScreenState extends State<ChatScreen> {
             false;
       });
 
-      ScaffoldMessenger.of(
-        context,
-      )
+      ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
           const SnackBar(
@@ -651,58 +658,169 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // ============================================================
+  // MISMO DÍA
+  // ============================================================
+
+  bool _mismoDia(
+    DateTime a,
+    DateTime b,
+  ) {
+    final localA =
+        a.toLocal();
+
+    final localB =
+        b.toLocal();
+
+    return localA.year ==
+            localB.year &&
+        localA.month ==
+            localB.month &&
+        localA.day ==
+            localB.day;
+  }
+
+  // ============================================================
+  // TEXTO FECHA
+  // ============================================================
+
+  String _fechaTexto(
+    DateTime fecha,
+  ) {
+    final local =
+        fecha.toLocal();
+
+    final ahora =
+        DateTime.now();
+
+    final hoy =
+        DateTime(
+      ahora.year,
+      ahora.month,
+      ahora.day,
+    );
+
+    final dia =
+        DateTime(
+      local.year,
+      local.month,
+      local.day,
+    );
+
+    final diferencia =
+        hoy.difference(
+      dia,
+    );
+
+    if (diferencia.inDays == 0) {
+      return 'Hoy';
+    }
+
+    if (diferencia.inDays == 1) {
+      return 'Ayer';
+    }
+
+    return '${local.day.toString().padLeft(2, '0')}/'
+        '${local.month.toString().padLeft(2, '0')}/'
+        '${local.year}';
+  }
+
+  // ============================================================
   // AVATAR
   // ============================================================
 
-  Widget _avatarUsuario() {
+  Widget _avatarUsuario({
+    double radio = 20,
+  }) {
     final String? url =
-        widget
-            .imagenUsuarioUrl;
+        _imagenChat;
 
     final bool tieneImagen =
         url != null &&
         url.trim().isNotEmpty;
 
+    final String titulo =
+        _tituloChat.trim();
+
     final String inicial =
-        widget
-                .nombreUsuario
-                .trim()
-                .isNotEmpty
-            ? widget
-                .nombreUsuario
-                .trim()[0]
-                .toUpperCase()
+        titulo.isNotEmpty
+            ? titulo[0].toUpperCase()
             : '?';
 
-    return CircleAvatar(
-      radius:
-          19,
+    return Container(
+      width:
+          radio * 2,
 
-      backgroundColor:
-          naranja,
+      height:
+          radio * 2,
 
-      foregroundColor:
-          Colors.white,
+      padding:
+          const EdgeInsets.all(
+        2,
+      ),
 
-      backgroundImage:
-          tieneImagen
-              ? NetworkImage(
-                  url,
-                )
-              : null,
+      decoration:
+          const BoxDecoration(
+        shape:
+            BoxShape.circle,
+
+        color:
+            Colors.white,
+      ),
 
       child:
-          !tieneImagen
-              ? Text(
-                  inicial,
+          ClipOval(
+        child:
+            tieneImagen
+                ? Image.network(
+                    url,
 
-                  style:
-                      const TextStyle(
-                    fontWeight:
-                        FontWeight.bold,
+                    fit:
+                        BoxFit.cover,
+
+                    errorBuilder:
+                        (
+                      context,
+                      error,
+                      stackTrace,
+                    ) {
+                      return _avatarFallback(
+                        inicial,
+                      );
+                    },
+                  )
+                : _avatarFallback(
+                    inicial,
                   ),
-                )
-              : null,
+      ),
+    );
+  }
+
+  Widget _avatarFallback(
+    String inicial,
+  ) {
+    return Container(
+      color:
+          AppColors.morado,
+
+      alignment:
+          Alignment.center,
+
+      child:
+          Text(
+        inicial,
+
+        style:
+            const TextStyle(
+          color:
+              Colors.white,
+
+          fontSize:
+              16,
+
+          fontWeight:
+              FontWeight.w900,
+        ),
+      ),
     );
   }
 
@@ -712,9 +830,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
-    ChatSocketService
-        .instance
-        .salirConversacion(
+    ChatSocketService.instance.salirConversacion(
       widget.conversacionId,
     );
 
@@ -730,11 +846,9 @@ class _ChatScreenState extends State<ChatScreen> {
         .instance
         .dejarDeEscucharConexion();
 
-    mensajeController
-        .dispose();
+    mensajeController.dispose();
 
-    scrollController
-        .dispose();
+    scrollController.dispose();
 
     super.dispose();
   }
@@ -747,25 +861,48 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(
     BuildContext context,
   ) {
-    final bool oscuro =
-        Theme.of(context)
-                .brightness ==
+    final oscuro =
+        Theme.of(context).brightness ==
             Brightness.dark;
 
     return Scaffold(
+      resizeToAvoidBottomInset:
+          true,
+
+      // ========================================================
+      // APP BAR
+      // ========================================================
+
       appBar:
           AppBar(
+        backgroundColor:
+            oscuro
+                ? AppColors.moradoOscuro
+                : AppColors.naranja,
+
+        foregroundColor:
+            Colors.white,
+
+        surfaceTintColor:
+            Colors.transparent,
+
+        elevation:
+            0,
+
         titleSpacing:
-            6,
+            2,
 
         title:
             Row(
           children: [
             // ==================================================
-            // FOTO
+            // LOGO EMPRENDIMIENTO
             // ==================================================
 
-            _avatarUsuario(),
+            _avatarUsuario(
+              radio:
+                  20,
+            ),
 
             const SizedBox(
               width:
@@ -773,42 +910,195 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
 
             // ==================================================
-            // NOMBRE
+            // EMPRENDIMIENTO + PROPIETARIO
             // ==================================================
 
             Expanded(
               child:
+                  Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+
+                mainAxisAlignment:
+                    MainAxisAlignment.center,
+
+                children: [
+                  // ============================================
+                  // EMPRENDIMIENTO
+                  // ============================================
+
                   Text(
-                widget
-                    .nombreUsuario,
+                    _tituloChat,
 
-                maxLines:
-                    1,
+                    maxLines:
+                        1,
 
-                overflow:
-                    TextOverflow
-                        .ellipsis,
+                    overflow:
+                        TextOverflow.ellipsis,
 
-                style:
-                    const TextStyle(
-                  fontWeight:
-                      FontWeight.w600,
-                ),
+                    style:
+                        const TextStyle(
+                      color:
+                          Colors.white,
+
+                      fontSize:
+                          17,
+
+                      height:
+                          1.10,
+
+                      fontWeight:
+                          FontWeight.w900,
+                    ),
+                  ),
+
+                  const SizedBox(
+                    height:
+                        2,
+                  ),
+
+                  // ============================================
+                  // PROPIETARIO
+                  // ============================================
+
+                  Row(
+                    children: [
+                      Icon(
+                        _tieneEmprendimiento
+                            ? Icons.person_outline_rounded
+                            : Icons.chat_bubble_outline_rounded,
+
+                        color:
+                            Colors.white.withValues(
+                          alpha:
+                              0.78,
+                        ),
+
+                        size:
+                            11,
+                      ),
+
+                      const SizedBox(
+                        width:
+                            4,
+                      ),
+
+                      Expanded(
+                        child:
+                            Text(
+                          _subtituloChat,
+
+                          maxLines:
+                              1,
+
+                          overflow:
+                              TextOverflow.ellipsis,
+
+                          style:
+                              TextStyle(
+                            color:
+                                Colors.white.withValues(
+                              alpha:
+                                  0.80,
+                            ),
+
+                            fontSize:
+                                11,
+
+                            fontWeight:
+                                FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
         ),
+
+        actions: [
+          IconButton(
+            tooltip:
+                'Actualizar',
+
+            onPressed:
+                () {
+              _cargarMensajes(
+                mostrarCarga:
+                    false,
+              );
+            },
+
+            icon:
+                const Icon(
+              Icons.refresh_rounded,
+            ),
+          ),
+
+          const SizedBox(
+            width:
+                4,
+          ),
+        ],
       ),
+
+      // ========================================================
+      // BODY
+      // ========================================================
 
       body:
           Column(
         children: [
+          // ====================================================
+          // MENSAJES
+          // ====================================================
+
           Expanded(
             child:
-                _listaMensajes(
-              oscuro,
+                Container(
+              decoration:
+                  BoxDecoration(
+                gradient:
+                    LinearGradient(
+                  begin:
+                      Alignment.topCenter,
+
+                  end:
+                      Alignment.bottomCenter,
+
+                  colors:
+                      oscuro
+                          ? const [
+                              Color(
+                                0xFF171320,
+                              ),
+                              Color(
+                                0xFF20182D,
+                              ),
+                            ]
+                          : const [
+                              Color(
+                                0xFFF7F5F9,
+                              ),
+                              Color(
+                                0xFFFFFFFF,
+                              ),
+                            ],
+                ),
+              ),
+
+              child:
+                  _listaMensajes(
+                oscuro,
+              ),
             ),
           ),
+
+          // ====================================================
+          // INPUT
+          // ====================================================
 
           _barraEnviar(
             oscuro,
@@ -819,7 +1109,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // ============================================================
-  // LISTA DE MENSAJES
+  // LISTA MENSAJES
   // ============================================================
 
   Widget _listaMensajes(
@@ -832,10 +1122,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (cargando) {
       return const Center(
         child:
-            CircularProgressIndicator(
-          color:
-              naranja,
-        ),
+            CircularProgressIndicator(),
       );
     }
 
@@ -846,7 +1133,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (error != null) {
       return Center(
         child:
-            SingleChildScrollView(
+            Padding(
           padding:
               const EdgeInsets.all(
             30,
@@ -859,9 +1146,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
             children: [
               const Icon(
-                Icons.error_outline,
+                Icons.cloud_off_outlined,
+
                 color:
-                    naranja,
+                    AppColors.naranja,
+
                 size:
                     50,
               ),
@@ -873,6 +1162,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
               Text(
                 error!,
+
                 textAlign:
                     TextAlign.center,
               ),
@@ -882,22 +1172,16 @@ class _ChatScreenState extends State<ChatScreen> {
                     15,
               ),
 
-              FilledButton(
-                style:
-                    FilledButton.styleFrom(
-                  backgroundColor:
-                      naranja,
+              FilledButton.icon(
+                onPressed:
+                    _cargarMensajes,
 
-                  foregroundColor:
-                      Colors.white,
+                icon:
+                    const Icon(
+                  Icons.refresh_rounded,
                 ),
 
-                onPressed:
-                    () {
-                  _cargarMensajes();
-                },
-
-                child:
+                label:
                     const Text(
                   'Reintentar',
                 ),
@@ -909,17 +1193,15 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     // ==========================================================
-    // CHAT VACÍO
+    // VACÍO
     // ==========================================================
 
-    if (
-      mensajes.isEmpty
-    ) {
-      return const Center(
+    if (mensajes.isEmpty) {
+      return Center(
         child:
             Padding(
           padding:
-              EdgeInsets.all(
+              const EdgeInsets.all(
             30,
           ),
 
@@ -929,40 +1211,77 @@ class _ChatScreenState extends State<ChatScreen> {
                 MainAxisSize.min,
 
             children: [
-              Icon(
-                Icons
-                    .waving_hand_outlined,
-                size:
-                    55,
-                color:
-                    naranja,
+              Container(
+                width:
+                    80,
+
+                height:
+                    80,
+
+                decoration:
+                    BoxDecoration(
+                  color:
+                      AppColors.naranja.withValues(
+                    alpha:
+                        0.10,
+                  ),
+
+                  shape:
+                      BoxShape.circle,
+                ),
+
+                child:
+                    const Icon(
+                  Icons.waving_hand_rounded,
+
+                  size:
+                      38,
+
+                  color:
+                      AppColors.naranja,
+                ),
               ),
 
-              SizedBox(
+              const SizedBox(
                 height:
-                    15,
+                    16,
               ),
 
               Text(
-                'Inicia la conversación',
+                _tieneEmprendimiento
+                    ? 'Escribe a $_tituloChat'
+                    : 'Inicia la conversación',
+
+                textAlign:
+                    TextAlign.center,
 
                 style:
-                    TextStyle(
+                    const TextStyle(
                   fontSize:
                       18,
 
                   fontWeight:
-                      FontWeight.bold,
+                      FontWeight.w800,
                 ),
               ),
 
-              SizedBox(
+              const SizedBox(
                 height:
-                    6,
+                    5,
               ),
 
               Text(
-                'Envía el primer mensaje.',
+                _tieneEmprendimiento
+                    ? 'Consulta productos, disponibilidad o información del emprendimiento.'
+                    : 'Envía el primer mensaje.',
+
+                textAlign:
+                    TextAlign.center,
+
+                style:
+                    Theme.of(context)
+                        .textTheme
+                        .bodySmall,
               ),
             ],
           ),
@@ -971,7 +1290,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     // ==========================================================
-    // MENSAJES
+    // LISTA
     // ==========================================================
 
     return ListView.builder(
@@ -984,9 +1303,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
       padding:
           const EdgeInsets.fromLTRB(
+        12,
         14,
-        18,
-        14,
+        12,
         18,
       ),
 
@@ -995,200 +1314,340 @@ class _ChatScreenState extends State<ChatScreen> {
 
       itemBuilder:
           (
-            context,
-            index,
-          ) {
-        final Mensaje mensaje =
-            mensajes[
-                index];
+        context,
+        index,
+      ) {
+        final mensaje =
+            mensajes[index];
 
-        final bool esMio =
-            mensaje
-                .esMio;
+        final bool mostrarFecha =
+            index == 0 ||
+                !_mismoDia(
+                  mensajes[index - 1].createdAt,
+                  mensaje.createdAt,
+                );
 
-        return Align(
-          alignment:
-              esMio
-                  ? Alignment
-                      .centerRight
-                  : Alignment
-                      .centerLeft,
-
-          child:
-              Container(
-            constraints:
-                BoxConstraints(
-              maxWidth:
-                  MediaQuery.of(
-                        context,
-                      ).size.width *
-                      0.76,
-            ),
-
-            margin:
-                const EdgeInsets.only(
-              bottom:
-                  8,
-            ),
-
-            padding:
-                const EdgeInsets.fromLTRB(
-              13,
-              9,
-              10,
-              6,
-            ),
-
-            decoration:
-                BoxDecoration(
-              color:
-                  esMio
-                      ? naranja
-                      : oscuro
-                          ? panelOscuro
-                          : Colors
-                              .grey
-                              .shade200,
-
-              borderRadius:
-                  BorderRadius.only(
-                topLeft:
-                    const Radius.circular(
-                  17,
-                ),
-
-                topRight:
-                    const Radius.circular(
-                  17,
-                ),
-
-                bottomLeft:
-                    Radius.circular(
-                  esMio
-                      ? 17
-                      : 4,
-                ),
-
-                bottomRight:
-                    Radius.circular(
-                  esMio
-                      ? 4
-                      : 17,
-                ),
+        return Column(
+          children: [
+            if (mostrarFecha)
+              _separadorFecha(
+                mensaje.createdAt,
+                oscuro,
               ),
+
+            _burbujaMensaje(
+              mensaje,
+              oscuro,
             ),
-
-            child:
-                Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.end,
-
-              children: [
-                Align(
-                  alignment:
-                      Alignment.centerLeft,
-
-                  child:
-                      Text(
-                    mensaje
-                        .contenido,
-
-                    style:
-                        TextStyle(
-                      color:
-                          esMio ||
-                                  oscuro
-                              ? Colors
-                                  .white
-                              : Colors
-                                  .black87,
-
-                      fontSize:
-                          15,
-                    ),
-                  ),
-                ),
-
-                const SizedBox(
-                  height:
-                      3,
-                ),
-
-                Row(
-                  mainAxisSize:
-                      MainAxisSize.min,
-
-                  children: [
-                    Text(
-                      _hora(
-                        mensaje
-                            .createdAt,
-                      ),
-
-                      style:
-                          TextStyle(
-                        color:
-                            esMio
-                                ? Colors
-                                    .white70
-                                : oscuro
-                                    ? Colors
-                                        .white60
-                                    : Colors
-                                        .black54,
-
-                        fontSize:
-                            10,
-                      ),
-                    ),
-
-                    // ==========================================
-                    // ✓ / ✓✓
-                    // ==========================================
-
-                    if (esMio) ...[
-                      const SizedBox(
-                        width:
-                            4,
-                      ),
-
-                      Icon(
-                        mensaje
-                                .leido
-                            ? Icons
-                                .done_all
-                            : Icons
-                                .done,
-
-                        size:
-                            15,
-
-                        color:
-                            mensaje
-                                    .leido
-                                ? Colors
-                                    .white
-                                : Colors
-                                    .white70,
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
+          ],
         );
       },
     );
   }
 
   // ============================================================
-  // BARRA PARA ENVIAR
+  // FECHA
+  // ============================================================
+
+  Widget _separadorFecha(
+    DateTime fecha,
+    bool oscuro,
+  ) {
+    return Padding(
+      padding:
+          const EdgeInsets.symmetric(
+        vertical:
+            12,
+      ),
+
+      child:
+          Center(
+        child:
+            Container(
+          padding:
+              const EdgeInsets.symmetric(
+            horizontal:
+                12,
+
+            vertical:
+                6,
+          ),
+
+          decoration:
+              BoxDecoration(
+            color:
+                oscuro
+                    ? AppColors.tarjetaOscura
+                    : Colors.white,
+
+            borderRadius:
+                BorderRadius.circular(
+              20,
+            ),
+
+            border:
+                Border.all(
+              color:
+                  oscuro
+                      ? AppColors.bordeOscuro
+                      : AppColors.bordeClaro,
+            ),
+          ),
+
+          child:
+              Text(
+            _fechaTexto(
+              fecha,
+            ),
+
+            style:
+                TextStyle(
+              fontSize:
+                  11,
+
+              fontWeight:
+                  FontWeight.w700,
+
+              color:
+                  Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(
+                        alpha:
+                            0.65,
+                      ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // BURBUJA MENSAJE
+  // ============================================================
+
+  Widget _burbujaMensaje(
+    Mensaje mensaje,
+    bool oscuro,
+  ) {
+    final bool esMio =
+        mensaje.esMio;
+
+    final Color fondoRecibido =
+        oscuro
+            ? AppColors.tarjetaOscura
+            : Colors.white;
+
+    return Align(
+      alignment:
+          esMio
+              ? Alignment.centerRight
+              : Alignment.centerLeft,
+
+      child:
+          Container(
+        constraints:
+            BoxConstraints(
+          maxWidth:
+              MediaQuery.of(context)
+                      .size
+                      .width *
+                  0.78,
+        ),
+
+        margin:
+            const EdgeInsets.only(
+          bottom:
+              5,
+        ),
+
+        padding:
+            const EdgeInsets.fromLTRB(
+          13,
+          9,
+          10,
+          6,
+        ),
+
+        decoration:
+            BoxDecoration(
+          // ====================================================
+          // MIS MENSAJES = NARANJA
+          // RECIBIDOS = TARJETA
+          // ====================================================
+
+          color:
+              esMio
+                  ? AppColors.naranja
+                  : fondoRecibido,
+
+          borderRadius:
+              BorderRadius.only(
+            topLeft:
+                const Radius.circular(
+              18,
+            ),
+
+            topRight:
+                const Radius.circular(
+              18,
+            ),
+
+            bottomLeft:
+                Radius.circular(
+              esMio
+                  ? 18
+                  : 5,
+            ),
+
+            bottomRight:
+                Radius.circular(
+              esMio
+                  ? 5
+                  : 18,
+            ),
+          ),
+
+          border:
+              esMio
+                  ? null
+                  : Border.all(
+                      color:
+                          oscuro
+                              ? AppColors.bordeOscuro
+                              : AppColors.bordeClaro,
+                    ),
+
+          boxShadow: [
+            BoxShadow(
+              color:
+                  Colors.black.withValues(
+                alpha:
+                    oscuro
+                        ? 0.12
+                        : 0.04,
+              ),
+
+              blurRadius:
+                  6,
+
+              offset:
+                  const Offset(
+                0,
+                2,
+              ),
+            ),
+          ],
+        ),
+
+        child:
+            Column(
+          crossAxisAlignment:
+              CrossAxisAlignment.end,
+
+          children: [
+            Align(
+              alignment:
+                  Alignment.centerLeft,
+
+              child:
+                  Text(
+                mensaje.contenido,
+
+                style:
+                    TextStyle(
+                  color:
+                      esMio
+                          ? Colors.white
+                          : Theme.of(context)
+                              .colorScheme
+                              .onSurface,
+
+                  fontSize:
+                      15,
+
+                  height:
+                      1.28,
+                ),
+              ),
+            ),
+
+            const SizedBox(
+              height:
+                  3,
+            ),
+
+            Row(
+              mainAxisSize:
+                  MainAxisSize.min,
+
+              children: [
+                Text(
+                  _hora(
+                    mensaje.createdAt,
+                  ),
+
+                  style:
+                      TextStyle(
+                    color:
+                        esMio
+                            ? Colors.white70
+                            : Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(
+                                  alpha:
+                                      0.50,
+                                ),
+
+                    fontSize:
+                        10,
+                  ),
+                ),
+
+                if (esMio) ...[
+                  const SizedBox(
+                    width:
+                        4,
+                  ),
+
+                  Icon(
+                    mensaje.leido
+                        ? Icons.done_all_rounded
+                        : Icons.done_rounded,
+
+                    size:
+                        15,
+
+                    color:
+                        mensaje.leido
+                            ? const Color(
+                                0xFFB9E5FF,
+                              )
+                            : Colors.white70,
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // BARRA DE ENVÍO
   // ============================================================
 
   Widget _barraEnviar(
     bool oscuro,
   ) {
+    final bool hayTexto =
+        mensajeController.text
+            .trim()
+            .isNotEmpty;
+
     return SafeArea(
       top:
           false,
@@ -1206,8 +1665,9 @@ class _ChatScreenState extends State<ChatScreen> {
         decoration:
             BoxDecoration(
           color:
-              Theme.of(context)
-                  .scaffoldBackgroundColor,
+              oscuro
+                  ? AppColors.moradoOscuro
+                  : Colors.white,
 
           border:
               Border(
@@ -1217,9 +1677,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   Theme.of(context)
                       .dividerColor
                       .withValues(
-                    alpha:
-                        0.35,
-                  ),
+                        alpha:
+                            0.40,
+                      ),
             ),
           ),
         ),
@@ -1230,6 +1690,10 @@ class _ChatScreenState extends State<ChatScreen> {
               CrossAxisAlignment.end,
 
           children: [
+            // ==================================================
+            // INPUT
+            // ==================================================
+
             Expanded(
               child:
                   TextField(
@@ -1243,42 +1707,37 @@ class _ChatScreenState extends State<ChatScreen> {
                     5,
 
                 textCapitalization:
-                    TextCapitalization
-                        .sentences,
+                    TextCapitalization.sentences,
 
-                onSubmitted:
-                    (_) {
-                  if (
-                    !enviando &&
-                    mensajeController
-                        .text
-                        .trim()
-                        .isNotEmpty
-                  ) {
-                    _enviarMensaje();
-                  }
+                onChanged:
+                    (
+                  _,
+                ) {
+                  setState(() {});
                 },
 
                 decoration:
                     InputDecoration(
                   hintText:
-                      'Escribe un mensaje...',
+                      _tieneEmprendimiento
+                          ? 'Escribe a $_tituloChat...'
+                          : 'Escribe un mensaje...',
 
                   filled:
                       true,
 
                   fillColor:
                       oscuro
-                          ? panelOscuro
-                          : Colors
-                              .grey
-                              .shade100,
+                          ? AppColors.tarjetaOscura
+                          : const Color(
+                              0xFFF3F1F5,
+                            ),
 
                   border:
                       OutlineInputBorder(
                     borderRadius:
                         BorderRadius.circular(
-                      24,
+                      26,
                     ),
 
                     borderSide:
@@ -1289,7 +1748,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       OutlineInputBorder(
                     borderRadius:
                         BorderRadius.circular(
-                      24,
+                      26,
                     ),
 
                     borderSide:
@@ -1300,13 +1759,13 @@ class _ChatScreenState extends State<ChatScreen> {
                       OutlineInputBorder(
                     borderRadius:
                         BorderRadius.circular(
-                      24,
+                      26,
                     ),
 
                     borderSide:
                         const BorderSide(
                       color:
-                          naranja,
+                          AppColors.naranja,
 
                       width:
                           1,
@@ -1316,10 +1775,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   contentPadding:
                       const EdgeInsets.symmetric(
                     horizontal:
-                        17,
+                        18,
 
                     vertical:
-                        11,
+                        12,
                   ),
                 ),
               ),
@@ -1330,12 +1789,58 @@ class _ChatScreenState extends State<ChatScreen> {
                   8,
             ),
 
-            Material(
-              color:
-                  naranja,
+            // ==================================================
+            // ENVIAR
+            // ==================================================
 
-              shape:
-                  const CircleBorder(),
+            AnimatedContainer(
+              duration:
+                  const Duration(
+                milliseconds:
+                    180,
+              ),
+
+              width:
+                  50,
+
+              height:
+                  50,
+
+              decoration:
+                  BoxDecoration(
+                color:
+                    hayTexto &&
+                            !enviando
+                        ? AppColors.naranja
+                        : AppColors.naranja.withValues(
+                            alpha:
+                                0.55,
+                          ),
+
+                shape:
+                    BoxShape.circle,
+
+                boxShadow: [
+                  if (hayTexto &&
+                      !enviando)
+                    BoxShadow(
+                      color:
+                          AppColors.naranja.withValues(
+                        alpha:
+                            0.25,
+                      ),
+
+                      blurRadius:
+                          10,
+
+                      offset:
+                          const Offset(
+                        0,
+                        4,
+                      ),
+                    ),
+                ],
+              ),
 
               child:
                   IconButton(
@@ -1343,12 +1848,16 @@ class _ChatScreenState extends State<ChatScreen> {
                     'Enviar',
 
                 onPressed:
-                    enviando
+                    enviando ||
+                            !hayTexto
                         ? null
                         : _enviarMensaje,
 
                 color:
                     Colors.white,
+
+                disabledColor:
+                    Colors.white70,
 
                 icon:
                     enviando
@@ -1369,8 +1878,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           )
                         : const Icon(
-                            Icons
-                                .send_rounded,
+                            Icons.send_rounded,
                           ),
               ),
             ),
