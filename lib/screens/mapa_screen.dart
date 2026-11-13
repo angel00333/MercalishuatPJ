@@ -236,6 +236,8 @@ class _MapaScreenState extends State<MapaScreen>
 
   Emprendimiento? _destinoActual;
 
+  String? _nombreDestinoRuta;
+
   double? _distanciaRuta;
 
   double? _duracionRuta;
@@ -818,17 +820,178 @@ class _MapaScreenState extends State<MapaScreen>
     _abriendoLocal = true;
 
     try {
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) =>
-              DetalleLocalComercialScreen(
-            localId: seleccionado!.id,
-          ),
-        ),
+      await _mostrarOpcionesLocalComercial(
+        seleccionado,
       );
     } finally {
       _abriendoLocal = false;
     }
+  }
+
+
+  // ============================================================
+  // OPCIONES LOCAL COMERCIAL
+  // ============================================================
+
+  Future<void> _mostrarOpcionesLocalComercial(
+    LocalComercial local,
+  ) async {
+    if (!mounted) {
+      return;
+    }
+
+    await showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (bottomContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              20,
+              4,
+              20,
+              24,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(
+                          alpha: 0.10,
+                        ),
+                        borderRadius: BorderRadius.circular(
+                          18,
+                        ),
+                      ),
+                      child: Image.asset(
+                        'assets/mapas/local.png',
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                    const SizedBox(
+                      width: 14,
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            local.titulo,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(
+                            height: 5,
+                          ),
+                          Text(
+                            local.tipoOperacion,
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(
+                            height: 6,
+                          ),
+                          const Row(
+                            children: [
+                              Icon(
+                                Icons.location_on,
+                                color: _naranjaPrincipal,
+                                size: 16,
+                              ),
+                              SizedBox(
+                                width: 4,
+                              ),
+                              Text(
+                                'Ubicación disponible',
+                                style: TextStyle(
+                                  color: _naranjaPrincipal,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(
+                  height: 24,
+                ),
+                SizedBox(
+                  height: 50,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(
+                        bottomContext,
+                      );
+
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              DetalleLocalComercialScreen(
+                            localId: local.id,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(
+                      Icons.store_mall_directory_outlined,
+                    ),
+                    label: const Text(
+                      'Ver detalle del local',
+                    ),
+                  ),
+                ),
+                const SizedBox(
+                  height: 12,
+                ),
+                SizedBox(
+                  height: 50,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _verdeRuta,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () {
+                      Navigator.pop(
+                        bottomContext,
+                      );
+
+                      _marcarRutaLocal(
+                        local,
+                      );
+                    },
+                    icon: const Icon(
+                      Icons.route,
+                    ),
+                    label: const Text(
+                      'Marcar ruta',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   // ============================================================
@@ -2366,6 +2529,9 @@ class _MapaScreenState extends State<MapaScreen>
     setState(() {
       _calculandoRuta = true;
       _destinoActual = emprendimiento;
+
+      _nombreDestinoRuta =
+          emprendimiento.nombre;
     });
 
     try {
@@ -2452,6 +2618,128 @@ class _MapaScreenState extends State<MapaScreen>
     } catch (e) {
       debugPrint(
         'ERROR RUTA: $e',
+      );
+
+      if (mounted) {
+        _mostrarMensaje(
+          'No se pudo calcular la ruta',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _calculandoRuta = false;
+        });
+      }
+    }
+  }
+
+
+  // ============================================================
+  // MARCAR RUTA A LOCAL COMERCIAL
+  // ============================================================
+
+  Future<void> _marcarRutaLocal(
+    LocalComercial local,
+  ) async {
+    if (_calculandoRuta) {
+      return;
+    }
+
+    if (local.latitud == null ||
+        local.longitud == null) {
+      _mostrarMensaje(
+        'Este local comercial no tiene ubicación.',
+      );
+
+      return;
+    }
+
+    setState(() {
+      _calculandoRuta = true;
+      _destinoActual = null;
+      _nombreDestinoRuta = local.titulo;
+    });
+
+    try {
+      final posicion =
+          await _obtenerPosicionParaRuta();
+
+      if (posicion == null) {
+        return;
+      }
+
+      _posicionUsuario = posicion;
+
+      final origen = LatLng(
+        posicion.latitude,
+        posicion.longitude,
+      );
+
+      final destino = LatLng(
+        local.latitud!,
+        local.longitud!,
+      );
+
+      _puntoGpsVisual = origen;
+
+      await _actualizarMarcadorGps(
+        origen,
+      );
+
+      final resultado =
+          await RutaService.obtenerRuta(
+        origen: origen,
+        destino: destino,
+      );
+
+      if (resultado['success'] != true) {
+        if (mounted) {
+          _mostrarMensaje(
+            resultado['message'] ??
+                'No se pudo calcular la ruta',
+          );
+        }
+
+        return;
+      }
+
+      final geojson =
+          Map<String, dynamic>.from(
+        resultado['geojson'],
+      );
+
+      _geoJsonRutaActual = geojson;
+
+      await _dibujarRuta(
+        geojson,
+      );
+
+      _distanciaRuta =
+          (resultado['distancia'] as num?)
+              ?.toDouble();
+
+      _duracionRuta =
+          (resultado['duracion'] as num?)
+              ?.toDouble();
+
+      if (mounted) {
+        setState(() {});
+      }
+
+      _seguirUsuario = false;
+
+      await _encuadrarRuta(
+        origen,
+        destino,
+      );
+
+      if (!_actualizacionContinua) {
+        await _iniciarActualizacionContinua();
+      }
+    } catch (e) {
+      debugPrint(
+        'ERROR RUTA LOCAL: $e',
       );
 
       if (mounted) {
@@ -2608,6 +2896,8 @@ class _MapaScreenState extends State<MapaScreen>
     _geoJsonRutaActual = null;
 
     _destinoActual = null;
+
+    _nombreDestinoRuta = null;
 
     _distanciaRuta = null;
 
@@ -3743,7 +4033,7 @@ class _MapaScreenState extends State<MapaScreen>
           // ====================================================
 
           if (_rutaCreada &&
-              _destinoActual != null)
+              _nombreDestinoRuta != null)
             Positioned(
               left: 15,
               right: 15,
@@ -3804,8 +4094,7 @@ class _MapaScreenState extends State<MapaScreen>
                               CrossAxisAlignment.start,
                           children: [
                             Text(
-                              _destinoActual!
-                                  .nombre,
+                              _nombreDestinoRuta!,
                               maxLines: 1,
                               overflow:
                                   TextOverflow.ellipsis,

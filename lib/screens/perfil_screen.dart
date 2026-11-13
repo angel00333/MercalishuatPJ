@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../config/app_theme.dart';
+
 import '../services/auth_service.dart';
 import '../services/perfil_imagen_service.dart';
 import '../services/session_service.dart';
@@ -10,23 +11,12 @@ import '../services/firebase_messaging_service.dart';
 import '../services/notificacion_service.dart';
 
 import 'configuracion_screen.dart';
+import 'dashboard_emprendedor_screen.dart';
 import 'login_screen.dart';
 
 import 'publicaciones/guardados_screen.dart';
-import 'publicaciones/mis_publicaciones_screen.dart';
-
-import 'producto_actions/productos_screen.dart';
-import 'tienda_actions/mi_tienda_screen.dart';
-
-// ============================================================
-// LOCALES COMERCIALES
-// ============================================================
 
 import 'locales/locales_comerciales_screen.dart';
-
-// ============================================================
-// ADMIN
-// ============================================================
 
 import 'admin/admin_dashboard_screen.dart';
 
@@ -43,24 +33,36 @@ class PerfilScreen extends StatefulWidget {
       _PerfilScreenState();
 }
 
-class _PerfilScreenState
-    extends State<PerfilScreen> {
+class _PerfilScreenState extends State<PerfilScreen> {
+  // ============================================================
+  // CONTROLADORES
+  // ============================================================
+
   final TextEditingController nombreController =
       TextEditingController();
 
   final TextEditingController correoController =
       TextEditingController();
 
-  final ImagePicker picker =
-      ImagePicker();
+  final ImagePicker picker = ImagePicker();
+
+  // ============================================================
+  // ESTADO
+  // ============================================================
 
   String rol = '';
 
   String? fotoPerfilUrl;
 
   bool cargando = true;
+
   bool guardando = false;
+
   bool subiendoFoto = false;
+
+  // ============================================================
+  // INIT
+  // ============================================================
 
   @override
   void initState() {
@@ -69,9 +71,9 @@ class _PerfilScreenState
     cargarPerfil();
   }
 
-  // ============================================
+  // ============================================================
   // CARGAR PERFIL
-  // ============================================
+  // ============================================================
 
   Future<void> cargarPerfil() async {
     if (mounted) {
@@ -88,17 +90,14 @@ class _PerfilScreenState
     }
 
     if (resultado['success'] == true) {
-      final usuario =
-          resultado['usuario'];
+      final usuario = resultado['usuario'];
 
       if (usuario != null) {
         nombreController.text =
-            usuario['nombre']?.toString() ??
-                '';
+            usuario['nombre']?.toString() ?? '';
 
         correoController.text =
-            usuario['correo']?.toString() ??
-                '';
+            usuario['correo']?.toString() ?? '';
 
         rol =
             usuario['rol']
@@ -117,14 +116,18 @@ class _PerfilScreenState
       );
     }
 
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
       cargando = false;
     });
   }
 
-  // ============================================
+  // ============================================================
   // GUARDAR PERFIL
-  // ============================================
+  // ============================================================
 
   Future<void> guardarPerfil() async {
     final nombre =
@@ -175,9 +178,9 @@ class _PerfilScreenState
     );
   }
 
-  // ============================================
+  // ============================================================
   // FOTO PERFIL
-  // ============================================
+  // ============================================================
 
   Future<void> elegirFoto(
     ImageSource source,
@@ -252,6 +255,10 @@ class _PerfilScreenState
     }
   }
 
+  // ============================================================
+  // OPCIONES FOTO
+  // ============================================================
+
   void mostrarOpcionesFoto() {
     showModalBottomSheet(
       context: context,
@@ -307,29 +314,27 @@ class _PerfilScreenState
     );
   }
 
-  // ============================================
+  // ============================================================
   // CERRAR SESIÓN
-  // ============================================
+  // ============================================================
 
   Future<void> cerrarSesion() async {
     try {
-      // =========================================
-      // OBTENER FID DE ESTE NAVEGADOR
-      // =========================================
+      // ========================================================
+      // OBTENER FID
+      // ========================================================
 
       final String? fid =
           FirebaseMessagingService
               .instance
               .fid;
 
-      // =========================================
-      // DESACTIVAR FID EN RAILWAY
-      //
-      // IMPORTANTE:
-      // todavía tenemos el JWT en este punto.
-      // =========================================
+      // ========================================================
+      // DESACTIVAR FID
+      // ========================================================
 
-      if (fid != null && fid.isNotEmpty) {
+      if (fid != null &&
+          fid.isNotEmpty) {
         final bool eliminado =
             await NotificacionService
                 .eliminarFid(
@@ -351,17 +356,17 @@ class _PerfilScreenState
         );
       }
 
-      // =========================================
-      // CERRAR LISTENER DE FIREBASE
-      // =========================================
+      // ========================================================
+      // CERRAR FIREBASE
+      // ========================================================
 
       await FirebaseMessagingService
           .instance
           .cerrar();
 
-      // =========================================
-      // BORRAR SESIÓN LOCAL
-      // =========================================
+      // ========================================================
+      // BORRAR SESIÓN
+      // ========================================================
 
       await SessionService.cerrarSesion();
 
@@ -372,9 +377,6 @@ class _PerfilScreenState
       debugPrint(
         'ERROR CERRANDO SESIÓN: $e',
       );
-
-      // Aunque Firebase o Railway fallen,
-      // debemos cerrar la sesión local.
 
       try {
         await FirebaseMessagingService
@@ -388,10 +390,6 @@ class _PerfilScreenState
 
       await SessionService.cerrarSesion();
     }
-
-    // =========================================
-    // VOLVER AL LOGIN
-    // =========================================
 
     if (!mounted) {
       return;
@@ -410,9 +408,9 @@ class _PerfilScreenState
     );
   }
 
-  // ============================================
-  // NAVEGACIÓN
-  // ============================================
+  // ============================================================
+  // GUARDADOS
+  // ============================================================
 
   Future<void> abrirGuardados() async {
     await Navigator.push(
@@ -424,33 +422,17 @@ class _PerfilScreenState
     );
   }
 
+  // ============================================================
+  // CENTRO DE NEGOCIO
+  // ============================================================
+
   Future<void>
-      abrirMisPublicaciones() async {
+      abrirDashboardEmprendedor() async {
     await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) =>
-            const MisPublicacionesScreen(),
-      ),
-    );
-  }
-
-  Future<void> abrirProductos() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            const ProductosScreen(),
-      ),
-    );
-  }
-
-  Future<void> abrirMiTienda() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            MiTiendaScreen(
+            DashboardEmprendedorScreen(
           themeService:
               widget.themeService,
         ),
@@ -458,9 +440,9 @@ class _PerfilScreenState
     );
   }
 
-  // ============================================
+  // ============================================================
   // LOCALES COMERCIALES
-  // ============================================
+  // ============================================================
 
   Future<void>
       abrirLocalesComerciales() async {
@@ -479,6 +461,10 @@ class _PerfilScreenState
     );
   }
 
+  // ============================================================
+  // CONFIGURACIÓN
+  // ============================================================
+
   Future<void>
       abrirConfiguracion() async {
     await Navigator.push(
@@ -493,9 +479,9 @@ class _PerfilScreenState
     );
   }
 
-  // ============================================
-  // PANEL ADMINISTRATIVO
-  // ============================================
+  // ============================================================
+  // ADMIN
+  // ============================================================
 
   Future<void> abrirPanelAdmin() async {
     await Navigator.push(
@@ -510,9 +496,9 @@ class _PerfilScreenState
     );
   }
 
-  // ============================================
+  // ============================================================
   // MENSAJE
-  // ============================================
+  // ============================================================
 
   void mostrarMensaje(
     String mensaje,
@@ -522,30 +508,42 @@ class _PerfilScreenState
     }
 
     ScaffoldMessenger.of(context)
-        .showSnackBar(
-      SnackBar(
-        content:
-            Text(mensaje),
-      ),
-    );
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content:
+              Text(
+            mensaje,
+          ),
+        ),
+      );
   }
+
+  // ============================================================
+  // DISPOSE
+  // ============================================================
 
   @override
   void dispose() {
     nombreController.dispose();
+
     correoController.dispose();
 
     super.dispose();
   }
 
-  // ============================================
+  // ============================================================
   // BUILD
-  // ============================================
+  // ============================================================
 
   @override
   Widget build(
     BuildContext context,
   ) {
+    // ==========================================================
+    // CARGANDO
+    // ==========================================================
+
     if (cargando) {
       return const Scaffold(
         body: Center(
@@ -558,9 +556,9 @@ class _PerfilScreenState
       );
     }
 
-    // ============================================
+    // ==========================================================
     // ROLES
-    // ============================================
+    // ==========================================================
 
     final bool esEmprendedor =
         rol == 'emprendedor';
@@ -568,7 +566,36 @@ class _PerfilScreenState
     final bool esAdministrador =
         rol == 'administrador';
 
+    // ==========================================================
+    // TEMA
+    // ==========================================================
+
+    final bool oscuro =
+        Theme.of(context).brightness ==
+            Brightness.dark;
+
+    final Color textoPrincipal =
+        Theme.of(context)
+            .colorScheme
+            .onSurface;
+
+    final Color textoSecundario =
+        textoPrincipal.withValues(
+      alpha: 0.60,
+    );
+
+    final Color borde =
+        Theme.of(context)
+            .dividerColor
+            .withValues(
+              alpha: 0.45,
+            );
+
     return Scaffold(
+      // ========================================================
+      // APP BAR
+      // ========================================================
+
       appBar: AppBar(
         title:
             const Text(
@@ -576,459 +603,392 @@ class _PerfilScreenState
         ),
       ),
 
+      // ========================================================
+      // BODY
+      // ========================================================
+
       body: RefreshIndicator(
         onRefresh:
             cargarPerfil,
+
+        color:
+            AppColors.naranja,
 
         child: ListView(
           physics:
               const AlwaysScrollableScrollPhysics(),
 
           padding:
-              const EdgeInsets.all(
+              const EdgeInsets.fromLTRB(
             20,
+            20,
+            20,
+            36,
           ),
 
           children: [
-            // =================================
-            // FOTO
-            // =================================
-
             Center(
-              child: Stack(
-                clipBehavior:
-                    Clip.none,
+              child:
+                  ConstrainedBox(
+                constraints:
+                    const BoxConstraints(
+                  maxWidth: 850,
+                ),
 
-                children: [
-                  CircleAvatar(
-                    radius: 60,
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.stretch,
 
-                    backgroundColor:
-                        AppColors.naranja,
+                  children: [
+                    // ============================================
+                    // PERFIL SUPERIOR
+                    // ============================================
 
-                    backgroundImage:
-                        fotoPerfilUrl !=
-                                    null &&
-                                fotoPerfilUrl!
-                                    .isNotEmpty
-                            ? NetworkImage(
-                                fotoPerfilUrl!,
-                              )
-                            : null,
+                    _cabeceraPerfil(
+                      esEmprendedor:
+                          esEmprendedor,
 
-                    child:
-                        fotoPerfilUrl ==
-                                    null ||
-                                fotoPerfilUrl!
-                                    .isEmpty
-                            ? const Icon(
-                                Icons.person,
-                                size: 70,
-                                color:
-                                    Colors.white,
-                              )
-                            : null,
-                  ),
+                      esAdministrador:
+                          esAdministrador,
 
-                  Positioned(
-                    right: -3,
-                    bottom: -3,
+                      oscuro:
+                          oscuro,
 
-                    child: Material(
-                      color:
-                          AppColors.naranja,
+                      textoSecundario:
+                          textoSecundario,
+                    ),
 
-                      shape:
-                          const CircleBorder(),
+                    const SizedBox(
+                      height: 30,
+                    ),
 
+                    // ============================================
+                    // DATOS PERSONALES
+                    // ============================================
+
+                    _tituloSeccion(
+                      icono:
+                          Icons.person_outline_rounded,
+
+                      titulo:
+                          'Datos personales',
+                    ),
+
+                    const SizedBox(
+                      height: 12,
+                    ),
+
+                    Card(
                       child:
-                          IconButton(
-                        tooltip:
-                            'Cambiar foto',
+                          Padding(
+                        padding:
+                            const EdgeInsets.all(
+                          18,
+                        ),
 
-                        onPressed:
-                            subiendoFoto
-                                ? null
-                                : mostrarOpcionesFoto,
+                        child:
+                            Column(
+                          children: [
+                            // =====================================
+                            // NOMBRE
+                            // =====================================
 
-                        icon:
-                            subiendoFoto
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
+                            TextField(
+                              controller:
+                                  nombreController,
 
-                                    child:
-                                        CircularProgressIndicator(
-                                      strokeWidth:
-                                          2,
-                                      color:
-                                          Colors.white,
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons
-                                        .camera_alt,
-                                    color:
-                                        Colors.white,
-                                  ),
+                              textCapitalization:
+                                  TextCapitalization
+                                      .words,
+
+                              decoration:
+                                  const InputDecoration(
+                                labelText:
+                                    'Nombre',
+
+                                prefixIcon:
+                                    Icon(
+                                  Icons
+                                      .person_outline_rounded,
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(
+                              height: 15,
+                            ),
+
+                            // =====================================
+                            // CORREO
+                            // =====================================
+
+                            TextField(
+                              controller:
+                                  correoController,
+
+                              keyboardType:
+                                  TextInputType
+                                      .emailAddress,
+
+                              decoration:
+                                  const InputDecoration(
+                                labelText:
+                                    'Correo electrónico',
+
+                                prefixIcon:
+                                    Icon(
+                                  Icons
+                                      .email_outlined,
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(
+                              height: 18,
+                            ),
+
+                            // =====================================
+                            // GUARDAR
+                            // =====================================
+
+                            SizedBox(
+                              width:
+                                  double.infinity,
+
+                              height:
+                                  50,
+
+                              child:
+                                  ElevatedButton.icon(
+                                onPressed:
+                                    guardando
+                                        ? null
+                                        : guardarPerfil,
+
+                                icon:
+                                    guardando
+                                        ? const SizedBox(
+                                            width:
+                                                21,
+
+                                            height:
+                                                21,
+
+                                            child:
+                                                CircularProgressIndicator(
+                                              strokeWidth:
+                                                  2,
+
+                                              color:
+                                                  Colors.white,
+                                            ),
+                                          )
+                                        : const Icon(
+                                            Icons
+                                                .save_outlined,
+                                          ),
+
+                                label:
+                                    Text(
+                                  guardando
+                                      ? 'Guardando...'
+                                      : 'Guardar cambios',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
 
-            const SizedBox(
-              height: 20,
-            ),
+                    // ============================================
+                    // MI NEGOCIO
+                    // ============================================
 
-            // =================================
-            // NOMBRE
-            // =================================
+                    if (esEmprendedor) ...[
+                      const SizedBox(
+                        height: 30,
+                      ),
 
-            Text(
-              nombreController.text,
-
-              textAlign:
-                  TextAlign.center,
-
-              style:
-                  const TextStyle(
-                fontSize: 24,
-                fontWeight:
-                    FontWeight.bold,
-              ),
-            ),
-
-            const SizedBox(
-              height: 5,
-            ),
-
-            // =================================
-            // ROL
-            // =================================
-
-            Text(
-              esAdministrador
-                  ? 'Administrador'
-                  : esEmprendedor
-                      ? 'Emprendedor'
-                      : 'Usuario',
-
-              textAlign:
-                  TextAlign.center,
-
-              style:
-                  const TextStyle(
-                color:
-                    AppColors.naranja,
-                fontWeight:
-                    FontWeight.w600,
-              ),
-            ),
-
-            const SizedBox(
-              height: 30,
-            ),
-
-            // =================================
-            // DATOS
-            // =================================
-
-            const Text(
-              'Datos personales',
-
-              style:
-                  TextStyle(
-                fontSize: 18,
-                fontWeight:
-                    FontWeight.bold,
-              ),
-            ),
-
-            const SizedBox(
-              height: 15,
-            ),
-
-            TextField(
-              controller:
-                  nombreController,
-
-              decoration:
-                  const InputDecoration(
-                labelText:
-                    'Nombre',
-
-                prefixIcon:
-                    Icon(
-                  Icons
-                      .person_outline,
-                ),
-              ),
-            ),
-
-            const SizedBox(
-              height: 15,
-            ),
-
-            TextField(
-              controller:
-                  correoController,
-
-              keyboardType:
-                  TextInputType
-                      .emailAddress,
-
-              decoration:
-                  const InputDecoration(
-                labelText:
-                    'Correo electrónico',
-
-                prefixIcon:
-                    Icon(
-                  Icons
-                      .email_outlined,
-                ),
-              ),
-            ),
-
-            const SizedBox(
-              height: 20,
-            ),
-
-            SizedBox(
-              height: 50,
-
-              child:
-                  ElevatedButton.icon(
-                onPressed:
-                    guardando
-                        ? null
-                        : guardarPerfil,
-
-                icon:
-                    guardando
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-
-                            child:
-                                CircularProgressIndicator(
-                              strokeWidth:
-                                  2,
-                              color:
-                                  Colors.white,
-                            ),
-                          )
-                        : const Icon(
+                      _tituloSeccion(
+                        icono:
                             Icons
-                                .save_outlined,
-                          ),
+                                .storefront_rounded,
 
-                label:
-                    Text(
-                  guardando
-                      ? 'Guardando...'
-                      : 'Guardar cambios',
+                        titulo:
+                            'Mi negocio',
+                      ),
+
+                      const SizedBox(
+                        height: 12,
+                      ),
+
+                      _tarjetaNegocio(
+                        textoSecundario:
+                            textoSecundario,
+
+                        borde:
+                            borde,
+                      ),
+                    ],
+
+                    // ============================================
+                    // ADMINISTRACIÓN
+                    // ============================================
+
+                    if (esAdministrador) ...[
+                      const SizedBox(
+                        height: 30,
+                      ),
+
+                      _tituloSeccion(
+                        icono:
+                            Icons
+                                .admin_panel_settings_outlined,
+
+                        titulo:
+                            'Administración',
+                      ),
+
+                      const SizedBox(
+                        height: 12,
+                      ),
+
+                      _opcion(
+                        icon:
+                            Icons
+                                .admin_panel_settings_outlined,
+
+                        titulo:
+                            'Panel administrativo',
+
+                        descripcion:
+                            'Usuarios, estadísticas y administración de Mercalishuat',
+
+                        onTap:
+                            abrirPanelAdmin,
+                      ),
+                    ],
+
+                    // ============================================
+                    // MI CUENTA
+                    // ============================================
+
+                    const SizedBox(
+                      height: 30,
+                    ),
+
+                    _tituloSeccion(
+                      icono:
+                          Icons
+                              .account_circle_outlined,
+
+                      titulo:
+                          'Mi cuenta',
+                    ),
+
+                    const SizedBox(
+                      height: 12,
+                    ),
+
+                    // ============================================
+                    // GUARDADOS
+                    // ============================================
+                    //
+                    // USUARIO Y EMPRENDEDOR.
+                    //
+                    // ============================================
+
+                    if (!esAdministrador)
+                      _opcion(
+                        icon:
+                            Icons
+                                .bookmark_outline_rounded,
+
+                        titulo:
+                            'Guardados',
+
+                        descripcion:
+                            'Publicaciones que has guardado',
+
+                        onTap:
+                            abrirGuardados,
+                      ),
+
+                    // ============================================
+                    // LOCALES COMERCIALES
+                    // ============================================
+
+                    if (!esAdministrador)
+                      _opcion(
+                        icon:
+                            Icons
+                                .business_outlined,
+
+                        titulo:
+                            'Locales comerciales',
+
+                        descripcion:
+                            'Explorar locales disponibles para venta o alquiler',
+
+                        onTap:
+                            abrirLocalesComerciales,
+                      ),
+
+                    // ============================================
+                    // CONFIGURACIÓN
+                    // ============================================
+
+                    _opcion(
+                      icon:
+                          Icons
+                              .settings_outlined,
+
+                      titulo:
+                          'Configuración',
+
+                      descripcion:
+                          'Tema, privacidad y preferencias de la aplicación',
+
+                      onTap:
+                          abrirConfiguracion,
+                    ),
+
+                    const SizedBox(
+                      height: 24,
+                    ),
+
+                    // ============================================
+                    // CERRAR SESIÓN
+                    // ============================================
+
+                    SizedBox(
+                      height: 50,
+
+                      child:
+                          OutlinedButton.icon(
+                        onPressed:
+                            cerrarSesion,
+
+                        icon:
+                            const Icon(
+                          Icons
+                              .logout_rounded,
+                        ),
+
+                        label:
+                            const Text(
+                          'Cerrar sesión',
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 20,
+                    ),
+                  ],
                 ),
               ),
-            ),
-
-            const SizedBox(
-              height: 35,
-            ),
-
-            // =================================
-            // TÍTULO PANEL
-            // =================================
-
-            Text(
-              esAdministrador
-                  ? 'Panel administrativo'
-                  : esEmprendedor
-                      ? 'Panel del emprendedor'
-                      : 'Mi cuenta',
-
-              style:
-                  const TextStyle(
-                fontSize: 18,
-                fontWeight:
-                    FontWeight.bold,
-              ),
-            ),
-
-            const SizedBox(
-              height: 12,
-            ),
-
-            // =================================
-            // OPCIONES ADMINISTRADOR
-            // =================================
-
-            if (esAdministrador) ...[
-              _opcion(
-                icon:
-                    Icons
-                        .admin_panel_settings_outlined,
-
-                titulo:
-                    'Panel administrativo',
-
-                descripcion:
-                    'Usuarios, estadísticas y administración de Mercalishuat',
-
-                onTap:
-                    abrirPanelAdmin,
-              ),
-            ],
-
-            // =================================
-            // OPCIONES EMPRENDEDOR
-            // =================================
-
-            if (esEmprendedor) ...[
-              _opcion(
-                icon:
-                    Icons
-                        .article_outlined,
-
-                titulo:
-                    'Mis publicaciones',
-
-                descripcion:
-                    'Crear, editar y administrar publicaciones',
-
-                onTap:
-                    abrirMisPublicaciones,
-              ),
-
-              _opcion(
-                icon:
-                    Icons
-                        .inventory_2_outlined,
-
-                titulo:
-                    'Productos',
-
-                descripcion:
-                    'Administrar productos de tu tienda',
-
-                onTap:
-                    abrirProductos,
-              ),
-
-              _opcion(
-                icon:
-                    Icons
-                        .storefront_outlined,
-
-                titulo:
-                    'Mi tienda',
-
-                descripcion:
-                    'Editar información de tu emprendimiento',
-
-                onTap:
-                    abrirMiTienda,
-              ),
-            ],
-
-            // =================================
-            // OPCIONES USUARIO NORMAL
-            // =================================
-
-            if (!esEmprendedor &&
-                !esAdministrador)
-              _opcion(
-                icon:
-                    Icons
-                        .bookmark_outline,
-
-                titulo:
-                    'Guardados',
-
-                descripcion:
-                    'Publicaciones que has guardado',
-
-                onTap:
-                    abrirGuardados,
-              ),
-
-            // =================================
-            // LOCALES COMERCIALES
-            //
-            // USUARIO:
-            // Ver, buscar, filtrar y consultar.
-            //
-            // EMPRENDEDOR:
-            // Además puede publicar y administrar.
-            //
-            // ADMINISTRADOR:
-            // Lo administrará desde su panel.
-            // =================================
-
-            if (!esAdministrador)
-              _opcion(
-                icon:
-                    Icons
-                        .business_outlined,
-
-                titulo:
-                    'Locales comerciales',
-
-                descripcion:
-                    esEmprendedor
-                        ? 'Ver locales disponibles o administrar tus publicaciones'
-                        : 'Locales disponibles para venta o alquiler',
-
-                onTap:
-                    abrirLocalesComerciales,
-              ),
-
-            // =================================
-            // CONFIGURACIÓN
-            // =================================
-
-            _opcion(
-              icon:
-                  Icons
-                      .settings_outlined,
-
-              titulo:
-                  'Configuración',
-
-              descripcion:
-                  'Tema y preferencias de la aplicación',
-
-              onTap:
-                  abrirConfiguracion,
-            ),
-
-            const SizedBox(
-              height: 20,
-            ),
-
-            // =================================
-            // LOGOUT
-            // =================================
-
-            OutlinedButton.icon(
-              onPressed:
-                  cerrarSesion,
-
-              icon:
-                  const Icon(
-                Icons.logout,
-              ),
-
-              label:
-                  const Text(
-                'Cerrar sesión',
-              ),
-            ),
-
-            const SizedBox(
-              height: 30,
             ),
           ],
         ),
@@ -1036,9 +996,559 @@ class _PerfilScreenState
     );
   }
 
-  // ============================================
-  // ITEM DEL PANEL
-  // ============================================
+  // ============================================================
+  // CABECERA PERFIL
+  // ============================================================
+
+  Widget _cabeceraPerfil({
+    required bool esEmprendedor,
+    required bool esAdministrador,
+    required bool oscuro,
+    required Color textoSecundario,
+  }) {
+    final String textoRol =
+        esAdministrador
+            ? 'Administrador'
+            : esEmprendedor
+                ? 'Emprendedor'
+                : 'Usuario';
+
+    return Column(
+      children: [
+        // ======================================================
+        // FOTO
+        // ======================================================
+
+        Stack(
+          clipBehavior:
+              Clip.none,
+
+          children: [
+            Container(
+              padding:
+                  const EdgeInsets.all(
+                4,
+              ),
+
+              decoration:
+                  BoxDecoration(
+                shape:
+                    BoxShape.circle,
+
+                border:
+                    Border.all(
+                  color:
+                      AppColors.naranja,
+
+                  width:
+                      3,
+                ),
+              ),
+
+              child:
+                  CircleAvatar(
+                radius: 57,
+
+                backgroundColor:
+                    AppColors.naranja,
+
+                backgroundImage:
+                    fotoPerfilUrl !=
+                                null &&
+                            fotoPerfilUrl!
+                                .isNotEmpty
+                        ? NetworkImage(
+                            fotoPerfilUrl!,
+                          )
+                        : null,
+
+                child:
+                    fotoPerfilUrl ==
+                                null ||
+                            fotoPerfilUrl!
+                                .isEmpty
+                        ? const Icon(
+                            Icons
+                                .person_rounded,
+
+                            size: 68,
+
+                            color:
+                                Colors.white,
+                          )
+                        : null,
+              ),
+            ),
+
+            // ==================================================
+            // BOTÓN CÁMARA
+            // ==================================================
+
+            Positioned(
+              right: -3,
+              bottom: -3,
+
+              child:
+                  Material(
+                color:
+                    AppColors.naranja,
+
+                shape:
+                    const CircleBorder(),
+
+                elevation: 3,
+
+                child:
+                    IconButton(
+                  tooltip:
+                      'Cambiar foto',
+
+                  onPressed:
+                      subiendoFoto
+                          ? null
+                          : mostrarOpcionesFoto,
+
+                  icon:
+                      subiendoFoto
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+
+                              child:
+                                  CircularProgressIndicator(
+                                strokeWidth:
+                                    2,
+
+                                color:
+                                    Colors.white,
+                              ),
+                            )
+                          : const Icon(
+                              Icons
+                                  .camera_alt_rounded,
+
+                              color:
+                                  Colors.white,
+                            ),
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(
+          height: 18,
+        ),
+
+        // ======================================================
+        // NOMBRE
+        // ======================================================
+
+        Text(
+          nombreController.text,
+
+          textAlign:
+              TextAlign.center,
+
+          style:
+              const TextStyle(
+            fontSize: 25,
+
+            height: 1.1,
+
+            fontWeight:
+                FontWeight.w900,
+
+            fontFamily:
+                'Outfit',
+          ),
+        ),
+
+        const SizedBox(
+          height: 6,
+        ),
+
+        // ======================================================
+        // CORREO
+        // ======================================================
+
+        Text(
+          correoController.text,
+
+          textAlign:
+              TextAlign.center,
+
+          style:
+              TextStyle(
+            color:
+                textoSecundario,
+
+            fontSize: 13,
+
+            fontFamily:
+                'Outfit',
+          ),
+        ),
+
+        const SizedBox(
+          height: 11,
+        ),
+
+        // ======================================================
+        // ROL
+        // ======================================================
+
+        Container(
+          padding:
+              const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 7,
+          ),
+
+          decoration:
+              BoxDecoration(
+            color:
+                AppColors.naranja
+                    .withValues(
+              alpha:
+                  oscuro
+                      ? 0.18
+                      : 0.10,
+            ),
+
+            borderRadius:
+                BorderRadius.circular(
+              20,
+            ),
+          ),
+
+          child:
+              Text(
+            textoRol,
+
+            style:
+                const TextStyle(
+              color:
+                  AppColors.naranja,
+
+              fontSize: 12,
+
+              fontWeight:
+                  FontWeight.w700,
+
+              fontFamily:
+                  'Outfit',
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // TARJETA MI NEGOCIO
+  // ============================================================
+
+  Widget _tarjetaNegocio({
+    required Color textoSecundario,
+    required Color borde,
+  }) {
+    return Material(
+      color:
+          Theme.of(context).cardColor,
+
+      borderRadius:
+          BorderRadius.circular(
+        24,
+      ),
+
+      child:
+          InkWell(
+        onTap:
+            abrirDashboardEmprendedor,
+
+        borderRadius:
+            BorderRadius.circular(
+          24,
+        ),
+
+        child:
+            Container(
+          decoration:
+              BoxDecoration(
+            borderRadius:
+                BorderRadius.circular(
+              24,
+            ),
+
+            border:
+                Border.all(
+              color: borde,
+            ),
+          ),
+
+          clipBehavior:
+              Clip.antiAlias,
+
+          child:
+              Column(
+            children: [
+              // =================================================
+              // CABECERA
+              // =================================================
+
+              Container(
+                width:
+                    double.infinity,
+
+                padding:
+                    const EdgeInsets.all(
+                  19,
+                ),
+
+                decoration:
+                    const BoxDecoration(
+                  gradient:
+                      LinearGradient(
+                    begin:
+                        Alignment.topLeft,
+
+                    end:
+                        Alignment.bottomRight,
+
+                    colors: [
+                      AppColors.naranja,
+                      AppColors
+                          .naranjaClaro,
+                    ],
+                  ),
+                ),
+
+                child:
+                    Row(
+                  children: [
+                    Container(
+                      width: 55,
+                      height: 55,
+
+                      decoration:
+                          BoxDecoration(
+                        color:
+                            Colors.white
+                                .withValues(
+                          alpha: 0.20,
+                        ),
+
+                        borderRadius:
+                            BorderRadius
+                                .circular(
+                          17,
+                        ),
+                      ),
+
+                      child:
+                          const Icon(
+                        Icons
+                            .storefront_rounded,
+
+                        color:
+                            Colors.white,
+
+                        size: 31,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      width: 15,
+                    ),
+
+                    const Expanded(
+                      child:
+                          Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment
+                                .start,
+
+                        children: [
+                          Text(
+                            'Centro de negocio',
+
+                            style:
+                                TextStyle(
+                              color:
+                                  Colors.white,
+
+                              fontSize:
+                                  19,
+
+                              fontWeight:
+                                  FontWeight
+                                      .w900,
+
+                              fontFamily:
+                                  'Outfit',
+                            ),
+                          ),
+
+                          SizedBox(
+                            height: 4,
+                          ),
+
+                          Text(
+                            'Administra tu emprendimiento desde un solo lugar',
+
+                            style:
+                                TextStyle(
+                              color:
+                                  Colors.white,
+
+                              fontSize:
+                                  12.5,
+
+                              height: 1.3,
+
+                              fontFamily:
+                                  'Outfit',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const Icon(
+                      Icons
+                          .arrow_forward_ios_rounded,
+
+                      color:
+                          Colors.white,
+
+                      size: 18,
+                    ),
+                  ],
+                ),
+              ),
+
+              // =================================================
+              // DESCRIPCIÓN
+              // =================================================
+
+              Padding(
+                padding:
+                    const EdgeInsets.all(
+                  17,
+                ),
+
+                child:
+                    Row(
+                  children: [
+                    Container(
+                      width: 43,
+                      height: 43,
+
+                      decoration:
+                          BoxDecoration(
+                        color:
+                            AppColors.naranja
+                                .withValues(
+                          alpha: 0.10,
+                        ),
+
+                        borderRadius:
+                            BorderRadius
+                                .circular(
+                          13,
+                        ),
+                      ),
+
+                      child:
+                          const Icon(
+                        Icons
+                            .dashboard_customize_outlined,
+
+                        color:
+                            AppColors.naranja,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      width: 13,
+                    ),
+
+                    Expanded(
+                      child:
+                          Text(
+                        'Tienda, productos, publicaciones, mensajes y herramientas comerciales.',
+
+                        style:
+                            TextStyle(
+                          color:
+                              textoSecundario,
+
+                          fontSize:
+                              12.8,
+
+                          height:
+                              1.35,
+
+                          fontFamily:
+                              'Outfit',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // TÍTULO SECCIÓN
+  // ============================================================
+
+  Widget _tituloSeccion({
+    required IconData icono,
+    required String titulo,
+  }) {
+    return Row(
+      children: [
+        Icon(
+          icono,
+
+          color:
+              AppColors.naranja,
+
+          size: 23,
+        ),
+
+        const SizedBox(
+          width: 9,
+        ),
+
+        Text(
+          titulo,
+
+          style:
+              const TextStyle(
+            fontSize: 19,
+
+            fontWeight:
+                FontWeight.w900,
+
+            fontFamily:
+                'Outfit',
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // OPCIÓN
+  // ============================================================
 
   Widget _opcion({
     required IconData icon,
@@ -1046,62 +1556,141 @@ class _PerfilScreenState
     required String descripcion,
     required VoidCallback onTap,
   }) {
+    final Color textoSecundario =
+        Theme.of(context)
+            .colorScheme
+            .onSurface
+            .withValues(
+              alpha: 0.60,
+            );
+
     return Card(
       margin:
           const EdgeInsets.only(
         bottom: 10,
       ),
 
-      child: ListTile(
-        onTap:
-            onTap,
+      child:
+          InkWell(
+        onTap: onTap,
 
-        leading:
-            Container(
-          width: 46,
-          height: 46,
+        borderRadius:
+            BorderRadius.circular(
+          20,
+        ),
 
-          decoration:
-              BoxDecoration(
-            color:
-                AppColors.naranja
-                    .withValues(
-              alpha: 0.12,
-            ),
-
-            borderRadius:
-                BorderRadius.circular(
-              12,
-            ),
+        child:
+            Padding(
+          padding:
+              const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 13,
           ),
 
           child:
+              Row(
+            children: [
+              // =================================================
+              // ICONO
+              // =================================================
+
+              Container(
+                width: 46,
+                height: 46,
+
+                decoration:
+                    BoxDecoration(
+                  color:
+                      AppColors.naranja
+                          .withValues(
+                    alpha: 0.10,
+                  ),
+
+                  borderRadius:
+                      BorderRadius.circular(
+                    14,
+                  ),
+                ),
+
+                child:
+                    Icon(
+                  icon,
+
+                  color:
+                      AppColors.naranja,
+
+                  size: 23,
+                ),
+              ),
+
+              const SizedBox(
+                width: 14,
+              ),
+
+              // =================================================
+              // TEXTO
+              // =================================================
+
+              Expanded(
+                child:
+                    Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+
+                  children: [
+                    Text(
+                      titulo,
+
+                      style:
+                          const TextStyle(
+                        fontSize: 15,
+
+                        fontWeight:
+                            FontWeight
+                                .w700,
+
+                        fontFamily:
+                            'Outfit',
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 3,
+                    ),
+
+                    Text(
+                      descripcion,
+
+                      style:
+                          TextStyle(
+                        color:
+                            textoSecundario,
+
+                        fontSize:
+                            12.5,
+
+                        height: 1.3,
+
+                        fontFamily:
+                            'Outfit',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(
+                width: 8,
+              ),
+
               Icon(
-            icon,
-            color:
-                AppColors.naranja,
+                Icons.chevron_right_rounded,
+
+                color:
+                    textoSecundario,
+              ),
+            ],
           ),
-        ),
-
-        title:
-            Text(
-          titulo,
-
-          style:
-              const TextStyle(
-            fontWeight:
-                FontWeight.w600,
-          ),
-        ),
-
-        subtitle:
-            Text(
-          descripcion,
-        ),
-
-        trailing:
-            const Icon(
-          Icons.chevron_right,
         ),
       ),
     );
