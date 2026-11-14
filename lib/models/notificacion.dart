@@ -21,6 +21,39 @@ class Notificacion {
     required this.createdAt,
   });
 
+  String get tipoNormalizado =>
+      tipo
+          .trim()
+          .toLowerCase();
+
+  String get referenciaTipoNormalizado =>
+      referenciaTipo
+          ?.trim()
+          .toLowerCase() ??
+      '';
+
+  bool get esMensaje =>
+      tipoNormalizado ==
+      'mensaje';
+
+  bool get esNuevoEmprendimiento =>
+      tipoNormalizado ==
+      'nuevo_emprendimiento';
+
+  bool get esNuevaPublicacion =>
+      tipoNormalizado ==
+      'nueva_publicacion';
+
+  bool get esNuevoProducto =>
+      tipoNormalizado ==
+      'nuevo_producto';
+
+  bool get tieneDestino =>
+      referenciaId != null &&
+      referenciaId! > 0 &&
+      referenciaTipoNormalizado
+          .isNotEmpty;
+
   factory Notificacion.fromJson(
     Map<String, dynamic> json,
   ) {

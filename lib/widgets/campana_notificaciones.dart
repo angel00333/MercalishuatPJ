@@ -1,8 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../config/app_theme.dart';
+import '../models/conversacion.dart';
 import '../screens/notificaciones/notificaciones_screen.dart';
+import '../screens/chat/chat_screen.dart';
+import '../screens/explorar/detalle_tienda_screen.dart';
+import '../screens/producto_actions/detalle_producto_screen.dart';
+import '../screens/publicaciones/detalle_publicacion_screen.dart';
 import '../services/chat_socket_service.dart';
+import '../services/chat_service.dart';
+import '../services/firebase_messaging_service.dart';
 import '../services/notificacion_service.dart';
 
 class CampanaNotificaciones
@@ -36,6 +45,14 @@ class _CampanaNotificacionesState
 
   bool _iniciando =
       false;
+
+
+  bool _procesandoPush =
+      false;
+
+  StreamSubscription<
+      Map<String, dynamic>>?
+      _aperturaPushSubscription;
 
   // ============================================================
   // INIT
@@ -102,6 +119,55 @@ class _CampanaNotificacionesState
       },
     );
 
+    // ==========================================================
+    // APERTURA DE PUSH
+    // ==========================================================
+
+    await _aperturaPushSubscription
+        ?.cancel();
+
+    _aperturaPushSubscription =
+        FirebaseMessagingService
+            .instance
+            .onNotificacionAbierta
+            .listen(
+      (
+        data,
+      ) {
+        if (!mounted) {
+          return;
+        }
+
+        _abrirDesdePush(
+          data,
+        );
+      },
+    );
+
+    final Map<String, dynamic>?
+        pendiente =
+        FirebaseMessagingService
+            .instance
+            .consumirNotificacionInicial();
+
+    if (
+      pendiente != null &&
+      mounted
+    ) {
+      WidgetsBinding.instance
+          .addPostFrameCallback(
+        (_) {
+          if (!mounted) {
+            return;
+          }
+
+          _abrirDesdePush(
+            pendiente,
+          );
+        },
+      );
+    }
+
     _iniciando =
         false;
   }
@@ -124,6 +190,265 @@ class _CampanaNotificacionesState
       _noLeidas =
           total;
     });
+  }
+
+  // ============================================================
+  // ABRIR DESDE PUSH
+  // ============================================================
+
+  Future<void> _abrirDesdePush(
+    Map<String, dynamic> data,
+  ) async {
+    if (
+      _procesandoPush ||
+      !mounted
+    ) {
+      return;
+    }
+
+    final String tipo =
+        data['tipo']
+                ?.toString()
+                .trim()
+                .toLowerCase() ??
+            '';
+
+    final String referenciaTipo =
+        data['referencia_tipo']
+                ?.toString()
+                .trim()
+                .toLowerCase() ??
+            '';
+
+    final int? referenciaId =
+        int.tryParse(
+      data['referencia_id']
+              ?.toString() ??
+          '',
+    );
+
+    if (
+      referenciaId == null ||
+      referenciaId <= 0
+    ) {
+      return;
+    }
+
+    _procesandoPush =
+        true;
+
+    // Si este evento era el mensaje inicial de una app
+    // recién abierta, evitamos que vuelva a procesarse.
+    FirebaseMessagingService
+        .instance
+        .descartarNotificacionInicial();
+
+    try {
+      // ========================================================
+      // MENSAJE
+      // ========================================================
+
+      if (
+        tipo == 'mensaje' &&
+        referenciaTipo ==
+            'conversacion'
+      ) {
+        final Conversacion?
+            conversacion =
+            await _buscarConversacion(
+          referenciaId,
+        );
+
+        if (
+          conversacion != null &&
+          mounted
+        ) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (_) =>
+                      ChatScreen(
+                conversacionId:
+                    referenciaId,
+
+                nombreUsuario:
+                    conversacion
+                        .nombreCompleto,
+
+                imagenUsuarioUrl:
+                    conversacion
+                        .imagenUsuarioUrl,
+              ),
+            ),
+          );
+        }
+
+        return;
+      }
+
+      // ========================================================
+      // EMPRENDIMIENTO
+      // ========================================================
+
+      if (
+        referenciaTipo ==
+            'emprendimiento'
+      ) {
+        if (!mounted) {
+          return;
+        }
+
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder:
+                (_) =>
+                    DetalleTiendaScreen(
+              emprendimientoId:
+                  referenciaId,
+            ),
+          ),
+        );
+
+        return;
+      }
+
+      // ========================================================
+      // PUBLICACIÓN
+      // ========================================================
+
+      if (
+        referenciaTipo ==
+            'publicacion'
+      ) {
+        if (!mounted) {
+          return;
+        }
+
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder:
+                (_) =>
+                    DetallePublicacionScreen(
+              publicacionId:
+                  referenciaId,
+            ),
+          ),
+        );
+
+        return;
+      }
+
+      // ========================================================
+      // PRODUCTO
+      // ========================================================
+
+      if (
+        referenciaTipo ==
+            'producto'
+      ) {
+        if (!mounted) {
+          return;
+        }
+
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder:
+                (_) =>
+                    DetalleProductoScreen(
+              productoId:
+                  referenciaId,
+            ),
+          ),
+        );
+      }
+    } catch (
+      e
+    ) {
+      debugPrint(
+        'ERROR ABRIENDO NOTIFICACIÓN PUSH: $e',
+      );
+    } finally {
+      _procesandoPush =
+          false;
+
+      if (mounted) {
+        await _actualizarContador();
+      }
+    }
+  }
+
+  // ============================================================
+  // BUSCAR CONVERSACIÓN
+  // ============================================================
+
+  Future<Conversacion?>
+      _buscarConversacion(
+    int conversacionId,
+  ) async {
+    try {
+      final resultado =
+          await ChatService
+              .listarConversaciones();
+
+      if (
+        resultado['success'] !=
+        true
+      ) {
+        return null;
+      }
+
+      final dynamic raw =
+          resultado[
+              'conversaciones'];
+
+      if (raw is! List) {
+        return null;
+      }
+
+      for (
+        final item in raw
+      ) {
+        final Conversacion
+            conversacion;
+
+        if (
+          item is Conversacion
+        ) {
+          conversacion =
+              item;
+        } else if (
+          item is Map
+        ) {
+          conversacion =
+              Conversacion.fromJson(
+            Map<String, dynamic>.from(
+              item,
+            ),
+          );
+        } else {
+          continue;
+        }
+
+        if (
+          conversacion.id ==
+          conversacionId
+        ) {
+          return conversacion;
+        }
+      }
+    } catch (
+      e
+    ) {
+      debugPrint(
+        'ERROR BUSCANDO CONVERSACIÓN DEL PUSH: $e',
+      );
+    }
+
+    return null;
   }
 
   // ============================================================
@@ -154,6 +479,9 @@ class _CampanaNotificacionesState
 
   @override
   void dispose() {
+    _aperturaPushSubscription
+        ?.cancel();
+
     ChatSocketService
         .instance
         .dejarDeEscucharContadorNotificaciones();

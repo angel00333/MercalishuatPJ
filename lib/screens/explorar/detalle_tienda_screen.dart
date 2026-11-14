@@ -492,14 +492,28 @@ class _DetalleTiendaScreenState
       // ========================================================
 
       appBar: AppBar(
+        // ======================================================
+        // MODO CLARO:
+        // - franja naranja
+        // - texto e iconos blancos
+        //
+        // MODO OSCURO:
+        // - conserva el fondo oscuro de la aplicación
+        // - sin franja naranja
+        // ======================================================
+
         backgroundColor:
-            Theme.of(context)
-                .scaffoldBackgroundColor,
+            oscuro
+                ? Theme.of(context)
+                    .scaffoldBackgroundColor
+                : AppColors.naranja,
 
         foregroundColor:
-            Theme.of(context)
-                .colorScheme
-                .onSurface,
+            oscuro
+                ? Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                : Colors.white,
 
         surfaceTintColor:
             Colors.transparent,
@@ -510,8 +524,9 @@ class _DetalleTiendaScreenState
         centerTitle:
             true,
 
-        title: Text(
-          tienda.nombre,
+        title:
+            const Text(
+          'Emprendimiento',
 
           maxLines:
               1,
@@ -519,7 +534,8 @@ class _DetalleTiendaScreenState
           overflow:
               TextOverflow.ellipsis,
 
-          style: const TextStyle(
+          style:
+              TextStyle(
             fontWeight:
                 FontWeight.w900,
           ),

@@ -12,7 +12,7 @@ class PoliticasPrivacidadScreen extends StatelessWidget {
   // ============================================================
 
   static const String versionPolitica =
-      'Versión Beta 7.1';
+      'Versión Preview 1.0.0';
 
   static const String ultimaActualizacion =
       'Noviembre 2026';

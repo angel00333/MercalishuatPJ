@@ -6,6 +6,9 @@ import '../../services/chat_service.dart';
 import '../../services/chat_socket_service.dart';
 import '../../services/notificacion_service.dart';
 import '../chat/chat_screen.dart';
+import '../explorar/detalle_tienda_screen.dart';
+import '../producto_actions/detalle_producto_screen.dart';
+import '../publicaciones/detalle_publicacion_screen.dart';
 
 class NotificacionesScreen
     extends StatefulWidget {
@@ -400,28 +403,69 @@ class _NotificacionesScreenState
   Future<void> _abrir(
     Notificacion notificacion,
   ) async {
-    if (
-      !notificacion.leida
-    ) {
-      await NotificacionService
-          .marcarComoLeida(
+    // ==========================================================
+    // MARCAR LOCALMENTE COMO LEÍDA
+    // ==========================================================
+
+    if (!notificacion.leida) {
+      final bool ok =
+          await NotificacionService
+              .marcarComoLeida(
         notificacion.id,
       );
+
+      if (!mounted) {
+        return;
+      }
+
+      if (ok) {
+        setState(() {
+          _notificaciones =
+              _notificaciones
+                  .map(
+                    (
+                      item,
+                    ) =>
+                        item.id ==
+                                notificacion.id
+                            ? item.copyWith(
+                                leida:
+                                    true,
+                              )
+                            : item,
+                  )
+                  .toList();
+        });
+      }
     }
 
     if (!mounted) {
       return;
     }
 
+    final int? referenciaId =
+        notificacion.referenciaId;
+
+    final String tipo =
+        notificacion.tipo
+            .trim()
+            .toLowerCase();
+
+    final String referenciaTipo =
+        notificacion.referenciaTipo
+                ?.trim()
+                .toLowerCase() ??
+            '';
+
+    // ==========================================================
+    // MENSAJE / CONVERSACIÓN
+    // ==========================================================
+
     if (
-      notificacion.tipo ==
-              'mensaje' &&
-      notificacion
-              .referenciaTipo ==
+      tipo == 'mensaje' &&
+      referenciaTipo ==
           'conversacion' &&
-      notificacion
-              .referenciaId !=
-          null
+      referenciaId != null
     ) {
       final Conversacion?
           conversacion =
@@ -436,8 +480,7 @@ class _NotificacionesScreenState
               (_) {
             return ChatScreen(
               conversacionId:
-                  notificacion
-                      .referenciaId!,
+                  referenciaId,
 
               nombreUsuario:
                   _nombreMostrado(
@@ -458,6 +501,118 @@ class _NotificacionesScreenState
               false,
         );
       }
+
+      return;
+    }
+
+    // ==========================================================
+    // NUEVO EMPRENDIMIENTO
+    // ==========================================================
+
+    if (
+      referenciaTipo ==
+              'emprendimiento' &&
+      referenciaId != null
+    ) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder:
+              (_) =>
+                  DetalleTiendaScreen(
+            emprendimientoId:
+                referenciaId,
+          ),
+        ),
+      );
+
+      if (mounted) {
+        await _cargar(
+          mostrarCarga:
+              false,
+        );
+      }
+
+      return;
+    }
+
+    // ==========================================================
+    // NUEVA PUBLICACIÓN
+    // ==========================================================
+
+    if (
+      referenciaTipo ==
+              'publicacion' &&
+      referenciaId != null
+    ) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder:
+              (_) =>
+                  DetallePublicacionScreen(
+            publicacionId:
+                referenciaId,
+          ),
+        ),
+      );
+
+      if (mounted) {
+        await _cargar(
+          mostrarCarga:
+              false,
+        );
+      }
+
+      return;
+    }
+
+    // ==========================================================
+    // NUEVO PRODUCTO
+    // ==========================================================
+
+    if (
+      referenciaTipo ==
+              'producto' &&
+      referenciaId != null
+    ) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder:
+              (_) =>
+                  DetalleProductoScreen(
+            productoId:
+                referenciaId,
+          ),
+        ),
+      );
+
+      if (mounted) {
+        await _cargar(
+          mostrarCarga:
+              false,
+        );
+      }
+
+      return;
+    }
+
+    // ==========================================================
+    // SIN DESTINO NAVEGABLE
+    // ==========================================================
+
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content:
+                Text(
+              'Esta notificación no tiene un destino disponible.',
+            ),
+          ),
+        );
     }
   }
 
@@ -519,60 +674,126 @@ class _NotificacionesScreenState
   }
 
   // ============================================================
+  // ICONO POR TIPO
+  // ============================================================
+
+  IconData _iconoTipo(
+    Notificacion notificacion,
+  ) {
+    switch (
+      notificacion.tipo
+          .trim()
+          .toLowerCase()
+    ) {
+      case 'mensaje':
+        return Icons
+            .chat_bubble_rounded;
+
+      case 'nuevo_emprendimiento':
+        return Icons
+            .storefront_rounded;
+
+      case 'nueva_publicacion':
+        return Icons
+            .article_rounded;
+
+      case 'nuevo_producto':
+        return Icons
+            .inventory_2_rounded;
+
+      default:
+        return Icons
+            .notifications_rounded;
+    }
+  }
+
+  // ============================================================
   // AVATAR
   // ============================================================
 
   Widget _avatar(
     Notificacion notificacion,
   ) {
-    final String nombre =
-        _nombreMostrado(
-      notificacion,
-    );
-
     final String? imagen =
         _imagenMostrada(
       notificacion,
     );
 
-    return CircleAvatar(
-      radius:
-          27,
+    // ==========================================================
+    // MENSAJES
+    //
+    // Si existe imagen del usuario/tienda de la conversación,
+    // conservamos el comportamiento actual.
+    // ==========================================================
 
-      backgroundColor:
-          naranja,
+    if (
+      notificacion.tipo
+              .trim()
+              .toLowerCase() ==
+          'mensaje' &&
+      imagen != null
+    ) {
+      return CircleAvatar(
+        radius:
+            27,
 
-      foregroundColor:
-          Colors.white,
+        backgroundColor:
+            naranja,
 
-      backgroundImage:
-          imagen != null
-              ? NetworkImage(
-                  imagen,
-                )
-              : null,
+        backgroundImage:
+            NetworkImage(
+          imagen,
+        ),
+      );
+    }
+
+    // ==========================================================
+    // RESTO DE NOTIFICACIONES
+    // ==========================================================
+
+    return Container(
+      width:
+          54,
+
+      height:
+          54,
+
+      decoration:
+          BoxDecoration(
+        color:
+            naranja.withValues(
+          alpha:
+              0.12,
+        ),
+
+        shape:
+            BoxShape.circle,
+
+        border:
+            Border.all(
+          color:
+              naranja.withValues(
+            alpha:
+                0.24,
+          ),
+        ),
+      ),
+
+      alignment:
+          Alignment.center,
 
       child:
-          imagen == null
-              ? Text(
-                  nombre.isNotEmpty
-                      ? nombre[0]
-                          .toUpperCase()
-                      : '?',
+          Icon(
+        _iconoTipo(
+          notificacion,
+        ),
 
-                  style:
-                      const TextStyle(
-                    color:
-                        Colors.white,
+        color:
+            naranja,
 
-                    fontSize:
-                        18,
-
-                    fontWeight:
-                        FontWeight.bold,
-                  ),
-                )
-              : null,
+        size:
+            26,
+      ),
     );
   }
 

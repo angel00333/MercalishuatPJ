@@ -12,6 +12,68 @@ class FirebaseMessagingService {
   static final FirebaseMessagingService instance =
       FirebaseMessagingService._();
 
+
+  // ============================================================
+  // APERTURA DE NOTIFICACIONES PUSH
+  // ============================================================
+
+  final StreamController<
+      Map<String, dynamic>>
+      _notificacionAbiertaController =
+      StreamController<
+          Map<String, dynamic>>.broadcast();
+
+  Map<String, dynamic>?
+      _notificacionInicialPendiente;
+
+  Stream<Map<String, dynamic>>
+      get onNotificacionAbierta =>
+          _notificacionAbiertaController
+              .stream;
+
+  Map<String, dynamic>?
+      consumirNotificacionInicial() {
+    final Map<String, dynamic>?
+        data =
+        _notificacionInicialPendiente;
+
+    _notificacionInicialPendiente =
+        null;
+
+    return data;
+  }
+
+  void descartarNotificacionInicial() {
+    _notificacionInicialPendiente =
+        null;
+  }
+
+  void _emitirNotificacionAbierta(
+    RemoteMessage message, {
+    bool guardarComoInicial =
+        false,
+  }) {
+    final Map<String, dynamic>
+        data =
+        Map<String, dynamic>.from(
+      message.data,
+    );
+
+    if (data.isEmpty) {
+      return;
+    }
+
+    if (guardarComoInicial) {
+      _notificacionInicialPendiente =
+          data;
+    }
+
+    _notificacionAbiertaController
+        .add(
+      data,
+    );
+  }
+
   StreamSubscription<String>? _registroSubscription;
 
   StreamSubscription<RemoteMessage>? _mensajeSubscription;
@@ -205,6 +267,10 @@ class FirebaseMessagingService {
           debugPrint(
             'FCM NOTIFICACIÓN ABIERTA: ${message.data}',
           );
+
+          _emitirNotificacionAbierta(
+            message,
+          );
         },
         onError: (
           Object error,
@@ -226,6 +292,12 @@ class FirebaseMessagingService {
         debugPrint(
           'FCM APP ABIERTA DESDE NOTIFICACIÓN: '
           '${initialMessage.data}',
+        );
+
+        _emitirNotificacionAbierta(
+          initialMessage,
+          guardarComoInicial:
+              true,
         );
       }
 
@@ -322,6 +394,9 @@ class FirebaseMessagingService {
         null;
 
     _fid =
+        null;
+
+    _notificacionInicialPendiente =
         null;
 
     debugPrint(
